@@ -336,6 +336,8 @@ PY
 
             def revision = sh(
                 script: """
+                    set -e
+
                     aws ecs register-task-definition \
                         --cli-input-json file://new-db-task-definition.json \
                         --region ${env.AWS_REGION} \
@@ -345,13 +347,15 @@ PY
                 returnStdout: true
             ).trim()
 
-            echo "REGISTERED ECS TASK REVISION = '${revision}'"
+            echo "AWS RETURNED REVISION = '${revision}'"
 
-            if (!revision || revision == "None") {
-                error("Failed to get ECS task definition revision.")
+            if (!revision || revision == "null" || revision == "None") {
+                error("ECS returned an invalid task definition revision: '${revision}'")
             }
 
             env.NEW_REVISION = revision
+
+            echo "NEW ECS TASK REVISION = '${env.NEW_REVISION}'"
         }
     }
 }
@@ -366,11 +370,14 @@ PY
     steps {
         script {
 
-            echo "NEW_REVISION = '${env.NEW_REVISION}'"
+            if (!env.NEW_REVISION ||
+                env.NEW_REVISION == "null" ||
+                env.NEW_REVISION == "None") {
 
-            if (!env.NEW_REVISION?.trim()) {
-                error("NEW_REVISION is empty. Cannot update ECS service.")
+                error("Invalid NEW_REVISION: '${env.NEW_REVISION}'")
             }
+
+            echo "Updating DEV service with revision: ${env.NEW_REVISION}"
 
             sh """
                 set -e
