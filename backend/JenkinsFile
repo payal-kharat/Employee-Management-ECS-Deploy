@@ -21,7 +21,7 @@ pipeline {
             "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
         BACKEND_REPOSITORY =
-            'employee-management-backend'
+            'employee-managemet-backend'
 
         BUILD_CONTEXT =
             './backend'
