@@ -27,7 +27,7 @@ pipeline {
 
         DB_REPOSITORY = 'employee-management-db'
 
-        BUILD_CONTEXT = './db/'
+        BUILD_CONTEXT = './db'
 
         TASK_DEFINITION_TEMPLATE = './db/task-definition.json'
 
