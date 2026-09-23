@@ -46,55 +46,40 @@ pipeline {
     stages {
 
 
-        stage('DEV - Build and Push') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'dev'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    def commitId = sh(
-                        script: 'git rev-parse --short=7 HEAD',
-                        returnStdout: true
-                    ).trim()
-
-                    env.IMAGE_TAG = "DEV-${commitId}"
-
-                    env.IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${env.IMAGE_TAG}"
-
-                    env.ECS_CLUSTER =
-                        'employee-managemet-dev-cluster'
-
-                    env.ECS_SERVICE =
-                        'employee-managemet-dev-db-service'
-
-                    env.ECS_TASK_FAMILY =
-                        'employee-managemet-dev-db'
-
-                    sh '''
-                        set -e
-
-                        aws ecr get-login-password \
-                            --region ${AWS_REGION} | \
-                        docker login \
-                            --username AWS \
-                            --password-stdin ${ECR_REGISTRY}
-
-                        docker build \
-                            -t ${IMAGE_URI} \
-                            ${BUILD_CONTEXT}
-
-                        docker push ${IMAGE_URI}
-                    '''
-                }
-            }
+      
+stage('DEV - Build and Push') {
+    when {
+        expression {
+            params.ENVIRONMENT == 'dev'
         }
+    }
+    steps {
+        script {
+            def commitId = sh(
+                script: 'git rev-parse --short=7 HEAD',
+                returnStdout: true
+            ).trim()
+
+            env.IMAGE_TAG = "DEV-${commitId}"
+            env.IMAGE_URI = "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${env.IMAGE_TAG}"
+
+            env.ECS_CLUSTER = 'employee-managemet-dev-cluster'
+            env.ECS_SERVICE = 'employee-managemet-dev-db-service'
+            env.ECS_TASK_FAMILY = 'employee-managemet-dev-db'
+
+            sh '''
+                set -e
+
+                aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+
+                docker build -t ${IMAGE_URI} ${BUILD_CONTEXT}
+
+                docker push ${IMAGE_URI}
+            '''
+        }
+    }
+}
+
 
 
         stage('QA - Promote Image') {
