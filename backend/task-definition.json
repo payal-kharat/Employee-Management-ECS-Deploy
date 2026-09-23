@@ -28,4 +28,28 @@
   ],
   "cpu": "256",
   "memory": "512"
+
+"environment": [
+  {
+    "name": "DB_HOST",
+    "value": "mysql"
+  },
+  {
+    "name": "DB_PORT",
+    "value": "3306"
+  },
+  {
+    "name": "DB_USER",
+    "value": "employee_user"
+  },
+  {
+    "name": "DB_PASSWORD",
+    "value": "employee123"
+  },
+  {
+    "name": "DB_NAME",
+    "value": "employee_db"
+  }
+]
+
 }
