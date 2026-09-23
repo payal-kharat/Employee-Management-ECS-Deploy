@@ -331,28 +331,32 @@ PY
         }
 
         stage('Register Task Definition') {
+    steps {
+        script {
 
-            steps {
+            def revision = sh(
+                script: """
+                    set -e
 
-                script {
+                    aws ecs register-task-definition \
+                        --cli-input-json file://new-db-task-definition.json \
+                        --region ${env.AWS_REGION} \
+                        --query 'taskDefinition.revision' \
+                        --output text
+                """,
+                returnStdout: true
+            ).trim()
 
-                    env.NEW_REVISION = sh(
-                        script: '''
-                            set -e
-
-                            aws ecs register-task-definition \
-                                --cli-input-json file://new-db-task-definition.json \
-                                --region ${AWS_REGION} \
-                                --query 'taskDefinition.revision' \
-                                --output text
-                        ''',
-                        returnStdout: true
-                    ).trim()
-
-                    echo "NEW ECS TASK REVISION = ${env.NEW_REVISION}"
-                }
+            if (!revision) {
+                error("ECS task definition registration returned an empty revision.")
             }
+
+            echo "NEW ECS TASK REVISION = ${revision}"
+
+            env.NEW_REVISION = revision
         }
+    }
+}
 
         stage('DEV - Update Service') {
 
