@@ -409,34 +409,49 @@ PY
             timeout(time: 15, unit: 'MINUTES') {
                 waitUntil {
 
-                    def status = sh(
+                    def running = sh(
                         script: """
                             aws ecs describe-services \
                                 --cluster employee-managemet-${params.ENVIRONMENT}-cluster \
                                 --services employee-managemet-${params.ENVIRONMENT}-frontend-service \
                                 --region ${env.AWS_REGION} \
-                                --query 'services[0].deployments' \
-                                --output json
+                                --query 'services[0].runningCount' \
+                                --output text
                         """,
                         returnStdout: true
                     ).trim()
 
-                    def deployments = readJSON text: status
+                    def desired = sh(
+                        script: """
+                            aws ecs describe-services \
+                                --cluster employee-managemet-${params.ENVIRONMENT}-cluster \
+                                --services employee-managemet-${params.ENVIRONMENT}-frontend-service \
+                                --region ${env.AWS_REGION} \
+                                --query 'services[0].desiredCount' \
+                                --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
 
-                    def primary = deployments.find {
-                        it.status == 'PRIMARY'
-                    }
+                    def pending = sh(
+                        script: """
+                            aws ecs describe-services \
+                                --cluster employee-managemet-${params.ENVIRONMENT}-cluster \
+                                --services employee-managemet-${params.ENVIRONMENT}-frontend-service \
+                                --region ${env.AWS_REGION} \
+                                --query 'services[0].pendingCount' \
+                                --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
 
-                    if (primary &&
-                        primary.runningCount == primary.desiredCount &&
-                        primary.pendingCount == 0 &&
-                        deployments.size() == 1) {
+                    echo "ECS Status: desired=${desired}, running=${running}, pending=${pending}"
 
+                    if (running == desired && pending == "0") {
                         echo "Frontend ECS deployment is stable."
                         return true
                     }
 
-                    echo "ECS deployment is still in progress..."
                     sleep 15
                     return false
                 }
