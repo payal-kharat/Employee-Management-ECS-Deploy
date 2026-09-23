@@ -20,7 +20,7 @@ pipeline {
             "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
         FRONTEND_REPOSITORY =
-            'employee-management-frontend'
+            'employee-managemet-frontend'
 
         BUILD_CONTEXT =
             './frontend'
