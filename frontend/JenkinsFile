@@ -31,12 +31,6 @@ pipeline {
 
     stages {
 
-        /*
-         * ============================================================
-         * 1. DEV - BUILD AND PUSH
-         * ============================================================
-         */
-
         stage('DEV - Build and Push') {
 
     when {
@@ -85,21 +79,12 @@ pipeline {
 
                 docker push ${imageUri}
             """
-
-            // IMPORTANT
-            env.IMAGE_URI = imageUri
+           env.IMAGE_URI = imageUri
 
             echo "IMAGE_URI saved as: ${env.IMAGE_URI}"
         }
     }
 }
-
-
-        /*
-         * ============================================================
-         * 2. QA - PROMOTE IMAGE
-         * ============================================================
-         */
 
         stage('QA - Promote Image') {
 
@@ -175,13 +160,6 @@ pipeline {
             }
         }
 
-
-        /*
-         * ============================================================
-         * 3. UAT - PROMOTE IMAGE
-         * ============================================================
-         */
-
         stage('UAT - Promote Image') {
 
             when {
@@ -255,13 +233,6 @@ pipeline {
                 }
             }
         }
-
-
-        /*
-         * ============================================================
-         * 4. PROD - PROMOTE IMAGE
-         * ============================================================
-         */
 
         stage('PROD - Promote Image') {
 
@@ -337,13 +308,6 @@ pipeline {
             }
         }
 
-
-        /*
-         * ============================================================
-         * 5. CREATE TASK DEFINITION
-         * ============================================================
-         */
-
         stage('Create Task Definition') {
 
             steps {
@@ -408,94 +372,80 @@ PY
             }
         }
 
-
-        /*
-         * ============================================================
-         * 6. REGISTER AND UPDATE ECS SERVICE
-         * ============================================================
-         */
-
         stage('Register and Update ECS Service') {
+    steps {
+        script {
 
-            steps {
+            def revision = sh(
+                script: """
+                    set -e
 
-                script {
+                    aws ecs register-task-definition \
+                        --cli-input-json file://new-frontend-task-definition.json \
+                        --region ${env.AWS_REGION} \
+                        --query 'taskDefinition.revision' \
+                        --output text
+                """,
+                returnStdout: true
+            ).trim()
 
-                    def revision = sh(
+            echo "Registered task definition revision: ${revision}"
+
+            sh """
+                set -e
+
+                echo "Updating ECS service..."
+
+                aws ecs update-service \
+                    --cluster employee-managemet-${params.ENVIRONMENT}-cluster \
+                    --service employee-managemet-${params.ENVIRONMENT}-frontend-service \
+                    --task-definition employee-managemet-${params.ENVIRONMENT}-frontend:${revision} \
+                    --force-new-deployment \
+                    --region ${env.AWS_REGION}
+
+                echo "Waiting for ECS service to become stable..."
+            """
+
+            timeout(time: 15, unit: 'MINUTES') {
+                waitUntil {
+
+                    def status = sh(
                         script: """
-                            set -e
-
-                            aws ecs register-task-definition \
-                                --cli-input-json file://new-frontend-task-definition.json \
+                            aws ecs describe-services \
+                                --cluster employee-managemet-${params.ENVIRONMENT}-cluster \
+                                --services employee-managemet-${params.ENVIRONMENT}-frontend-service \
                                 --region ${env.AWS_REGION} \
-                                --query 'taskDefinition.revision' \
-                                --output text
+                                --query 'services[0].deployments' \
+                                --output json
                         """,
                         returnStdout: true
                     ).trim()
 
-                    echo "AWS REGISTERED REVISION = '${revision}'"
+                    def deployments = readJSON text: status
 
-                    if (!revision ||
-                        revision == 'null' ||
-                        revision == 'None') {
-
-                        error(
-                            "ECS returned invalid revision: '${revision}'"
-                        )
+                    def primary = deployments.find {
+                        it.status == 'PRIMARY'
                     }
 
-                    def environment =
-                        params.ENVIRONMENT
+                    if (primary &&
+                        primary.runningCount == primary.desiredCount &&
+                        primary.pendingCount == 0 &&
+                        deployments.size() == 1) {
 
-                    def cluster =
-                        "employee-managemet-${environment}-cluster"
+                        echo "Frontend ECS deployment is stable."
+                        return true
+                    }
 
-                    def service =
-                        "employee-managemet-${environment}-frontend-service"
-
-                    def taskFamily =
-                        "employee-managemet-${environment}-frontend"
-
-                    echo "ENVIRONMENT = ${environment}"
-                    echo "CLUSTER = ${cluster}"
-                    echo "SERVICE = ${service}"
-                    echo "TASK FAMILY = ${taskFamily}"
-                    echo "TASK REVISION = ${revision}"
-
-                    sh """
-                        set -e
-
-                        echo "Updating ECS service..."
-
-                        aws ecs update-service \
-                            --cluster ${cluster} \
-                            --service ${service} \
-                            --task-definition ${taskFamily}:${revision} \
-                            --force-new-deployment \
-                            --region ${env.AWS_REGION}
-
-                        echo "Waiting for ECS service to become stable..."
-
-                        aws ecs wait services-stable \
-                            --cluster ${cluster} \
-                            --services ${service} \
-                            --region ${env.AWS_REGION}
-
-                        echo "Frontend ECS deployment completed successfully."
-                    """
+                    echo "ECS deployment is still in progress..."
+                    sleep 15
+                    return false
                 }
             }
+
+            echo "Frontend ECS deployment completed successfully."
         }
     }
-
-
-    /*
-     * ================================================================
-     * POST
-     * ================================================================
-     */
-
+}
     post {
 
         always {
