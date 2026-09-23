@@ -14,34 +14,14 @@ pipeline {
 
     environment {
 
-        /* =====================================================
-           AWS
-           ===================================================== */
-
         AWS_REGION     = 'us-east-1'
         AWS_ACCOUNT_ID = '552940445807'
 
         ECR_REGISTRY =
             "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-
-        /* =====================================================
-           ECR REPOSITORIES
-           ===================================================== */
-
-        FRONTEND_REPOSITORY =
-            'employee-management-frontend'
-
         BACKEND_REPOSITORY =
             'employee-management-backend'
-
-        DB_REPOSITORY =
-            'employee-managemet-db'
-
-
-        /* =====================================================
-           BACKEND BUILD
-           ===================================================== */
 
         BUILD_CONTEXT =
             './backend'
@@ -50,18 +30,17 @@ pipeline {
             './backend/task-definition.json'
     }
 
-
     stages {
 
-
-        /* =====================================================
-           DEV - BUILD AND PUSH
-           ===================================================== */
+        /*
+         * ============================================================
+         * DEV - BUILD AND PUSH
+         * ============================================================
+         */
 
         stage('DEV - Build and Push') {
 
             when {
-
                 expression {
                     params.ENVIRONMENT == 'dev'
                 }
@@ -76,24 +55,15 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-
                     def imageTag =
                         "DEV-${commitId}"
-
 
                     def imageUri =
                         "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${imageTag}"
 
-
-                    echo "======================================"
-                    echo "BUILDING BACKEND IMAGE"
-                    echo "======================================"
-                    echo "Environment : dev"
-                    echo "Commit ID   : ${commitId}"
-                    echo "Image Tag   : ${imageTag}"
-                    echo "Image URI   : ${imageUri}"
-                    echo "======================================"
-
+                    echo "ENVIRONMENT = dev"
+                    echo "IMAGE TAG = ${imageTag}"
+                    echo "IMAGE URI = ${imageUri}"
 
                     sh """
                         set -e
@@ -104,34 +74,28 @@ pipeline {
                             --username AWS \
                             --password-stdin ${env.ECR_REGISTRY}
 
-
                         docker build \
                             -t ${imageUri} \
                             ${env.BUILD_CONTEXT}
 
-
                         docker push ${imageUri}
                     """
 
-
-                    echo "======================================"
-                    echo "BACKEND IMAGE BUILT AND PUSHED"
-                    echo "======================================"
-                    echo "Image: ${imageUri}"
-                    echo "======================================"
+                    env.IMAGE_URI = imageUri
                 }
             }
         }
 
 
-        /* =====================================================
-           QA - PROMOTE IMAGE
-           ===================================================== */
+        /*
+         * ============================================================
+         * QA - PROMOTE LATEST DEV IMAGE
+         * ============================================================
+         */
 
         stage('QA - Promote Image') {
 
             when {
-
                 expression {
                     params.ENVIRONMENT == 'qa'
                 }
@@ -141,51 +105,36 @@ pipeline {
 
                 script {
 
-                    /*
-                     * Find the latest DEV image from ECR.
-                     */
-
                     def sourceTag = sh(
                         script: """
                             aws ecr describe-images \
                                 --repository-name ${env.BACKEND_REPOSITORY} \
                                 --region ${env.AWS_REGION} \
-                                --query 'sort_by(imageDetails,&imagePushedAt)[?imageTags && contains(join(`,`,imageTags), `DEV-`)] | [-1].imageTags[?starts_with(@, `DEV-`)] | [0]' \
+                                --filter tagStatus=TAGGED \
+                                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[?starts_with(@, \\`DEV-\\`)] | [0]' \
                                 --output text
                         """,
                         returnStdout: true
                     ).trim()
 
-
                     if (!sourceTag ||
                         sourceTag == 'None' ||
                         sourceTag == 'null') {
 
-                        error(
-                            "No DEV backend image found in ECR."
-                        )
+                        error("No DEV image found in ECR.")
                     }
-
 
                     def sourceImage =
                         "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${sourceTag}"
 
-
                     def targetTag =
                         "QA-${sourceTag.replaceFirst('^DEV-', '')}"
-
 
                     def targetImage =
                         "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${targetTag}"
 
-
-                    echo "======================================"
-                    echo "PROMOTING BACKEND IMAGE"
-                    echo "======================================"
-                    echo "Source : ${sourceImage}"
-                    echo "Target : ${targetImage}"
-                    echo "======================================"
-
+                    echo "SOURCE IMAGE = ${sourceImage}"
+                    echo "TARGET IMAGE = ${targetImage}"
 
                     sh """
                         set -e
@@ -196,33 +145,30 @@ pipeline {
                             --username AWS \
                             --password-stdin ${env.ECR_REGISTRY}
 
-
                         docker pull ${sourceImage}
-
 
                         docker tag \
                             ${sourceImage} \
                             ${targetImage}
 
-
                         docker push ${targetImage}
                     """
 
-
-                    echo "Backend image promoted DEV -> QA"
+                    env.IMAGE_URI = targetImage
                 }
             }
         }
 
 
-        /* =====================================================
-           UAT - PROMOTE IMAGE
-           ===================================================== */
+        /*
+         * ============================================================
+         * UAT - PROMOTE LATEST DEV IMAGE
+         * ============================================================
+         */
 
         stage('UAT - Promote Image') {
 
             when {
-
                 expression {
                     params.ENVIRONMENT == 'uat'
                 }
@@ -232,51 +178,36 @@ pipeline {
 
                 script {
 
-                    /*
-                     * Find the latest QA image from ECR.
-                     */
-
                     def sourceTag = sh(
                         script: """
                             aws ecr describe-images \
                                 --repository-name ${env.BACKEND_REPOSITORY} \
                                 --region ${env.AWS_REGION} \
-                                --query 'sort_by(imageDetails,&imagePushedAt)[?imageTags && contains(join(`,`,imageTags), `QA-`)] | [-1].imageTags[?starts_with(@, `QA-`)] | [0]' \
+                                --filter tagStatus=TAGGED \
+                                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[?starts_with(@, \\`DEV-\\`)] | [0]' \
                                 --output text
                         """,
                         returnStdout: true
                     ).trim()
 
-
                     if (!sourceTag ||
                         sourceTag == 'None' ||
                         sourceTag == 'null') {
 
-                        error(
-                            "No QA backend image found in ECR."
-                        )
+                        error("No DEV image found in ECR.")
                     }
-
 
                     def sourceImage =
                         "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${sourceTag}"
 
-
                     def targetTag =
-                        "UAT-${sourceTag.replaceFirst('^QA-', '')}"
-
+                        "UAT-${sourceTag.replaceFirst('^DEV-', '')}"
 
                     def targetImage =
                         "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${targetTag}"
 
-
-                    echo "======================================"
-                    echo "PROMOTING BACKEND IMAGE"
-                    echo "======================================"
-                    echo "Source : ${sourceImage}"
-                    echo "Target : ${targetImage}"
-                    echo "======================================"
-
+                    echo "SOURCE IMAGE = ${sourceImage}"
+                    echo "TARGET IMAGE = ${targetImage}"
 
                     sh """
                         set -e
@@ -287,33 +218,30 @@ pipeline {
                             --username AWS \
                             --password-stdin ${env.ECR_REGISTRY}
 
-
                         docker pull ${sourceImage}
-
 
                         docker tag \
                             ${sourceImage} \
                             ${targetImage}
 
-
                         docker push ${targetImage}
                     """
 
-
-                    echo "Backend image promoted QA -> UAT"
+                    env.IMAGE_URI = targetImage
                 }
             }
         }
 
 
-        /* =====================================================
-           PROD - PROMOTE IMAGE
-           ===================================================== */
+        /*
+         * ============================================================
+         * PROD - PROMOTE LATEST DEV IMAGE
+         * ============================================================
+         */
 
         stage('PROD - Promote Image') {
 
             when {
-
                 expression {
                     params.ENVIRONMENT == 'prod'
                 }
@@ -323,51 +251,36 @@ pipeline {
 
                 script {
 
-                    /*
-                     * Find the latest UAT image from ECR.
-                     */
-
                     def sourceTag = sh(
                         script: """
                             aws ecr describe-images \
                                 --repository-name ${env.BACKEND_REPOSITORY} \
                                 --region ${env.AWS_REGION} \
-                                --query 'sort_by(imageDetails,&imagePushedAt)[?imageTags && contains(join(`,`,imageTags), `UAT-`)] | [-1].imageTags[?starts_with(@, `UAT-`)] | [0]' \
+                                --filter tagStatus=TAGGED \
+                                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[?starts_with(@, \\`DEV-\\`)] | [0]' \
                                 --output text
                         """,
                         returnStdout: true
                     ).trim()
 
-
                     if (!sourceTag ||
                         sourceTag == 'None' ||
                         sourceTag == 'null') {
 
-                        error(
-                            "No UAT backend image found in ECR."
-                        )
+                        error("No DEV image found in ECR.")
                     }
-
 
                     def sourceImage =
                         "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${sourceTag}"
 
-
                     def targetTag =
-                        "PROD-${sourceTag.replaceFirst('^UAT-', '')}"
-
+                        "PROD-${sourceTag.replaceFirst('^DEV-', '')}"
 
                     def targetImage =
                         "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${targetTag}"
 
-
-                    echo "======================================"
-                    echo "PROMOTING BACKEND IMAGE"
-                    echo "======================================"
-                    echo "Source : ${sourceImage}"
-                    echo "Target : ${targetImage}"
-                    echo "======================================"
-
+                    echo "SOURCE IMAGE = ${sourceImage}"
+                    echo "TARGET IMAGE = ${targetImage}"
 
                     sh """
                         set -e
@@ -378,28 +291,26 @@ pipeline {
                             --username AWS \
                             --password-stdin ${env.ECR_REGISTRY}
 
-
                         docker pull ${sourceImage}
-
 
                         docker tag \
                             ${sourceImage} \
                             ${targetImage}
 
-
                         docker push ${targetImage}
                     """
 
-
-                    echo "Backend image promoted UAT -> PROD"
+                    env.IMAGE_URI = targetImage
                 }
             }
         }
 
 
-        /* =====================================================
-           CREATE TASK DEFINITION
-           ===================================================== */
+        /*
+         * ============================================================
+         * CREATE TASK DEFINITION
+         * ============================================================
+         */
 
         stage('Create Task Definition') {
 
@@ -407,96 +318,19 @@ pipeline {
 
                 script {
 
-                    /*
-                     * Determine the image and ECS environment.
-                     */
+                    if (!env.IMAGE_URI?.trim()) {
 
-                    def environment =
-                        params.ENVIRONMENT
-
-
-                    def sourceTag
-
-
-                    if (environment == 'dev') {
-
-                        def commitId = sh(
-                            script: 'git rev-parse --short=7 HEAD',
-                            returnStdout: true
-                        ).trim()
-
-                        sourceTag =
-                            "DEV-${commitId}"
-
-                    } else if (environment == 'qa') {
-
-                        sourceTag = sh(
-                            script: """
-                                aws ecr describe-images \
-                                    --repository-name ${env.BACKEND_REPOSITORY} \
-                                    --region ${env.AWS_REGION} \
-                                    --query 'sort_by(imageDetails,&imagePushedAt)[?imageTags && contains(join(`,`,imageTags), `QA-`)] | [-1].imageTags[?starts_with(@, `QA-`)] | [0]' \
-                                    --output text
-                            """,
-                            returnStdout: true
-                        ).trim()
-
-                    } else if (environment == 'uat') {
-
-                        sourceTag = sh(
-                            script: """
-                                aws ecr describe-images \
-                                    --repository-name ${env.BACKEND_REPOSITORY} \
-                                    --region ${env.AWS_REGION} \
-                                    --query 'sort_by(imageDetails,&imagePushedAt)[?imageTags && contains(join(`,`,imageTags), `UAT-`)] | [-1].imageTags[?starts_with(@, `UAT-`)] | [0]' \
-                                    --output text
-                            """,
-                            returnStdout: true
-                        ).trim()
-
-                    } else if (environment == 'prod') {
-
-                        sourceTag = sh(
-                            script: """
-                                aws ecr describe-images \
-                                    --repository-name ${env.BACKEND_REPOSITORY} \
-                                    --region ${env.AWS_REGION} \
-                                    --query 'sort_by(imageDetails,&imagePushedAt)[?imageTags && contains(join(`,`,imageTags), `PROD-`)] | [-1].imageTags[?starts_with(@, `PROD-`)] | [0]' \
-                                    --output text
-                            """,
-                            returnStdout: true
-                        ).trim()
+                        error("IMAGE_URI is empty.")
                     }
 
-
-                    if (!sourceTag ||
-                        sourceTag == 'None' ||
-                        sourceTag == 'null') {
-
-                        error(
-                            "Could not determine backend image tag for ${environment}."
-                        )
-                    }
-
-
-                    def imageUri =
-                        "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${sourceTag}"
-
-
-                    echo "======================================"
-                    echo "TASK DEFINITION"
-                    echo "======================================"
-                    echo "Environment : ${environment}"
-                    echo "Image Tag   : ${sourceTag}"
-                    echo "Image URI   : ${imageUri}"
-                    echo "======================================"
-
+                    echo "IMAGE URI = ${env.IMAGE_URI}"
+                    echo "ENVIRONMENT = ${params.ENVIRONMENT}"
 
                     sh """
                         set -e
 
-                        ENVIRONMENT="${environment}" \
-                        IMAGE_URI="${imageUri}" \
+                        ENVIRONMENT="${params.ENVIRONMENT}" \
+                        IMAGE_URI="${env.IMAGE_URI}" \
                         TASK_DEFINITION_TEMPLATE="${env.TASK_DEFINITION_TEMPLATE}" \
                         python3 - <<'PY'
 
@@ -522,16 +356,14 @@ for container in task_definition["containerDefinitions"]:
         break
 
 else:
-    raise Exception(
-        "Container named 'backend' was not found."
-    )
+    raise Exception("Container named 'backend' was not found.")
 
 with open(output_file, "w") as f:
     json.dump(task_definition, f, indent=2)
 
 PY
 
-                        echo "Generated backend task definition:"
+                        echo "Generated task definition:"
                         cat new-backend-task-definition.json
                     """
                 }
@@ -539,56 +371,21 @@ PY
         }
 
 
-        /* =====================================================
-           REGISTER AND UPDATE ECS
-           ===================================================== */
+        /*
+         * ============================================================
+         * REGISTER + UPDATE ECS SERVICE
+         *
+         * IMPORTANT:
+         * Revision is kept in a LOCAL Groovy variable.
+         * It is NOT stored in env.NEW_REVISION.
+         * ============================================================
+         */
 
         stage('Register and Update ECS Service') {
 
             steps {
 
                 script {
-
-                    def environment =
-                        params.ENVIRONMENT
-
-
-                    def cluster =
-                        "employee-managemet-${environment}-cluster"
-
-
-                    def service =
-                        "employee-managemet-${environment}-backend-service"
-
-
-                    def taskFamily =
-                        "employee-managemet-${environment}-backend"
-
-
-                    /*
-                     * UAT uses employee-managemet-uat-*
-                     * so the dynamic naming above is correct.
-                     */
-
-
-                    echo "======================================"
-                    echo "ECS DEPLOYMENT"
-                    echo "======================================"
-                    echo "Environment : ${environment}"
-                    echo "Cluster     : ${cluster}"
-                    echo "Service     : ${service}"
-                    echo "Task Family : ${taskFamily}"
-                    echo "======================================"
-
-
-                    /*
-                     * Register task definition.
-                     *
-                     * IMPORTANT:
-                     * Revision is stored in local Groovy variable.
-                     *
-                     * No NEW_REVISION environment variable.
-                     */
 
                     def revision = sh(
                         script: """
@@ -603,22 +400,34 @@ PY
                         returnStdout: true
                     ).trim()
 
-
                     echo "AWS REGISTERED REVISION = '${revision}'"
-
 
                     if (!revision ||
                         revision == 'null' ||
                         revision == 'None') {
 
                         error(
-                            "Invalid ECS revision returned by AWS: '${revision}'"
+                            "ECS returned invalid revision: '${revision}'"
                         )
                     }
 
+                    def environment =
+                        params.ENVIRONMENT
 
-                    echo "Updating ECS service..."
+                    def cluster =
+                        "employee-managemet-${environment}-cluster"
 
+                    def service =
+                        "employee-managemet-${environment}-backend-service"
+
+                    def taskFamily =
+                        "employee-managemet-${environment}-backend"
+
+                    echo "ENVIRONMENT = ${environment}"
+                    echo "CLUSTER = ${cluster}"
+                    echo "SERVICE = ${service}"
+                    echo "TASK FAMILY = ${taskFamily}"
+                    echo "TASK REVISION = ${revision}"
 
                     sh """
                         set -e
@@ -629,14 +438,6 @@ PY
                             --task-definition ${taskFamily}:${revision} \
                             --force-new-deployment \
                             --region ${env.AWS_REGION}
-                    """
-
-
-                    echo "Waiting for ECS service to become stable..."
-
-
-                    sh """
-                        set -e
 
                         aws ecs wait services-stable \
                             --cluster ${cluster} \
@@ -644,25 +445,12 @@ PY
                             --region ${env.AWS_REGION}
                     """
 
-
-                    echo "======================================"
-                    echo "BACKEND ECS DEPLOYMENT COMPLETED"
-                    echo "======================================"
-                    echo "Environment : ${environment}"
-                    echo "Cluster     : ${cluster}"
-                    echo "Service     : ${service}"
-                    echo "Task Family : ${taskFamily}"
-                    echo "Revision    : ${revision}"
-                    echo "======================================"
+                    echo "ECS ${environment} backend deployment completed successfully."
                 }
             }
         }
     }
 
-
-    /* =========================================================
-       POST
-       ========================================================= */
 
     post {
 
