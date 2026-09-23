@@ -74,11 +74,14 @@ pipeline {
                             --username AWS \
                             --password-stdin ${env.ECR_REGISTRY}
 
-                        docker build \
-                            -t ${imageUri} \
-                            ${env.BUILD_CONTEXT}
+                       sh """
+    docker build \
+        -t ${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${imageTag} \
+        ./frontend
 
-                        docker push ${imageUri}
+    docker push \
+        ${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${imageTag}
+"""
                     """
 
                     env.IMAGE_URI = imageUri
