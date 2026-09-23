@@ -39,55 +39,60 @@ pipeline {
 
         stage('DEV - Build and Push') {
 
-            when {
-                expression {
-                    params.ENVIRONMENT == 'dev'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    def commitId = sh(
-                        script: 'git rev-parse --short=7 HEAD',
-                        returnStdout: true
-                    ).trim()
-
-                    def imageTag =
-                        "DEV-${commitId}"
-
-                    def imageUri =
-                        "${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${imageTag}"
-
-                    echo "ENVIRONMENT = dev"
-                    echo "IMAGE TAG = ${imageTag}"
-                    echo "IMAGE URI = ${imageUri}"
-
-                    sh """
-                        set -e
-
-                        echo "Logging in to ECR..."
-
-                        aws ecr get-login-password \
-                            --region ${env.AWS_REGION} | \
-                        docker login \
-                            --username AWS \
-                            --password-stdin ${env.ECR_REGISTRY}
-
-                        echo "Building frontend Docker image..."
-
-                        docker build \
-                            -t ${imageUri} \
-                            ${env.BUILD_CONTEXT}
-
-                        echo "Pushing frontend Docker image..."
-
-                        docker push ${imageUri}
-                    """
-                }
-            }
+    when {
+        expression {
+            params.ENVIRONMENT == 'dev'
         }
+    }
+
+    steps {
+
+        script {
+
+            def commitId = sh(
+                script: 'git rev-parse --short=7 HEAD',
+                returnStdout: true
+            ).trim()
+
+            def imageTag =
+                "DEV-${commitId}"
+
+            def imageUri =
+                "${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${imageTag}"
+
+            echo "ENVIRONMENT = dev"
+            echo "IMAGE TAG = ${imageTag}"
+            echo "IMAGE URI = ${imageUri}"
+
+            sh """
+                set -e
+
+                echo "Logging in to ECR..."
+
+                aws ecr get-login-password \
+                    --region ${env.AWS_REGION} | \
+                docker login \
+                    --username AWS \
+                    --password-stdin ${env.ECR_REGISTRY}
+
+                echo "Building frontend Docker image..."
+
+                docker build \
+                    -t ${imageUri} \
+                    ${env.BUILD_CONTEXT}
+
+                echo "Pushing frontend Docker image..."
+
+                docker push ${imageUri}
+            """
+
+            // IMPORTANT
+            env.IMAGE_URI = imageUri
+
+            echo "IMAGE_URI saved as: ${env.IMAGE_URI}"
+        }
+    }
+}
 
 
         /*
