@@ -1,4 +1,3 @@
-
 pipeline {
 
     agent any
@@ -10,12 +9,6 @@ pipeline {
             choices: ['dev', 'qa', 'uat', 'prod'],
             description: 'Select environment'
         )
-
-        string(
-            name: 'IMAGE_TAG',
-            defaultValue: '',
-            description: 'For QA/UAT/PROD enter source image tag'
-        )
     }
 
     environment {
@@ -23,80 +16,80 @@ pipeline {
         AWS_REGION     = 'us-east-1'
         AWS_ACCOUNT_ID = '552940445807'
 
-        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REGISTRY =
+            "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
         DB_REPOSITORY = 'employee-managemet-db'
 
-        BUILD_CONTEXT = './db'
+        BUILD_CONTEXT =
+            './db'
 
-        TASK_DEFINITION_TEMPLATE = './db/task-definition.json'
-
-        IMAGE_URI       = ''
-        IMAGE_TAG       = ''
-        ECS_CLUSTER     = ''
-        ECS_SERVICE     = ''
-        ECS_TASK_FAMILY = ''
-        NEW_REVISION    = ''
+        TASK_DEFINITION_TEMPLATE =
+            './db/task-definition.json'
     }
 
     stages {
 
-       stage('DEV - Build and Push') {
+        /*
+         * ============================================================
+         * DEV - BUILD AND PUSH
+         * ============================================================
+         */
 
-    when {
-        expression {
-            params.ENVIRONMENT == 'dev'
+        stage('DEV - Build and Push') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'dev'
+                }
+            }
+
+            steps {
+
+                script {
+
+                    def commitId = sh(
+                        script: 'git rev-parse --short=7 HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    def imageTag =
+                        "DEV-${commitId}"
+
+                    def imageUri =
+                        "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${imageTag}"
+
+                    echo "ENVIRONMENT = dev"
+                    echo "IMAGE TAG = ${imageTag}"
+                    echo "IMAGE URI = ${imageUri}"
+
+                    sh """
+                        set -e
+
+                        aws ecr get-login-password \
+                            --region ${env.AWS_REGION} | \
+                        docker login \
+                            --username AWS \
+                            --password-stdin ${env.ECR_REGISTRY}
+
+                        docker build \
+                            -t ${imageUri} \
+                            ${env.BUILD_CONTEXT}
+
+                        docker push ${imageUri}
+                    """
+
+                    env.IMAGE_URI = imageUri
+                }
+            }
         }
-    }
 
-    steps {
 
-        script {
-
-            def commitId = sh(
-                script: 'git rev-parse --short=7 HEAD',
-                returnStdout: true
-            ).trim()
-
-            def imageTag = "DEV-${commitId}"
-
-            def imageUri =
-                "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${imageTag}"
-
-            echo "IMAGE_TAG = ${imageTag}"
-            echo "IMAGE_URI = ${imageUri}"
-            echo "BUILD_CONTEXT = ${env.BUILD_CONTEXT}"
-
-            sh """
-                set -e
-
-                aws ecr get-login-password \
-                    --region ${env.AWS_REGION} | \
-                docker login \
-                    --username AWS \
-                    --password-stdin ${env.ECR_REGISTRY}
-
-                docker build \
-                    -t ${imageUri} \
-                    ${env.BUILD_CONTEXT}
-
-                docker push ${imageUri}
-            """
-
-            env.IMAGE_TAG = imageTag
-            env.IMAGE_URI = imageUri
-
-            env.ECS_CLUSTER =
-                'employee-managemet-dev-cluster'
-
-            env.ECS_SERVICE =
-                'employee-managemet-dev-db-service'
-
-            env.ECS_TASK_FAMILY =
-                'employee-managemet-dev-db'
-        }
-    }
-}
+        /*
+         * ============================================================
+         * QA - PROMOTE LATEST DEV IMAGE
+         * ============================================================
+         */
 
         stage('QA - Promote Image') {
 
@@ -110,11 +103,24 @@ pipeline {
 
                 script {
 
-                    if (!params.IMAGE_TAG?.trim()) {
-                        error('IMAGE_TAG is required for QA.')
-                    }
+                    def sourceTag = sh(
+                        script: """
+                            aws ecr describe-images \
+                                --repository-name ${env.DB_REPOSITORY} \
+                                --region ${env.AWS_REGION} \
+                                --filter tagStatus=TAGGED \
+                                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[?starts_with(@, \\`DEV-\\`)] | [0]' \
+                                --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
 
-                    def sourceTag = params.IMAGE_TAG.trim()
+                    if (!sourceTag ||
+                        sourceTag == 'None' ||
+                        sourceTag == 'null') {
+
+                        error("No DEV image found in ECR.")
+                    }
 
                     def sourceImage =
                         "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${sourceTag}"
@@ -122,43 +128,41 @@ pipeline {
                     def targetTag =
                         "QA-${sourceTag.replaceFirst('^DEV-', '')}"
 
-                    env.IMAGE_TAG = targetTag
-
-                    env.IMAGE_URI =
+                    def targetImage =
                         "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${targetTag}"
 
-                    env.ECS_CLUSTER =
-                        'employee-managemet-qa-cluster'
-
-                    env.ECS_SERVICE =
-                        'employee-managemet-qa-db-service'
-
-                    env.ECS_TASK_FAMILY =
-                        'employee-managemet-qa-db'
-
                     echo "SOURCE IMAGE = ${sourceImage}"
-                    echo "TARGET IMAGE = ${env.IMAGE_URI}"
+                    echo "TARGET IMAGE = ${targetImage}"
 
                     sh """
                         set -e
 
                         aws ecr get-login-password \
-                            --region ${AWS_REGION} | \
+                            --region ${env.AWS_REGION} | \
                         docker login \
                             --username AWS \
-                            --password-stdin ${ECR_REGISTRY}
+                            --password-stdin ${env.ECR_REGISTRY}
 
                         docker pull ${sourceImage}
 
                         docker tag \
                             ${sourceImage} \
-                            ${env.IMAGE_URI}
+                            ${targetImage}
 
-                        docker push ${env.IMAGE_URI}
+                        docker push ${targetImage}
                     """
+
+                    env.IMAGE_URI = targetImage
                 }
             }
         }
+
+
+        /*
+         * ============================================================
+         * UAT - PROMOTE LATEST DEV IMAGE
+         * ============================================================
+         */
 
         stage('UAT - Promote Image') {
 
@@ -172,11 +176,24 @@ pipeline {
 
                 script {
 
-                    if (!params.IMAGE_TAG?.trim()) {
-                        error('IMAGE_TAG is required for UAT.')
-                    }
+                    def sourceTag = sh(
+                        script: """
+                            aws ecr describe-images \
+                                --repository-name ${env.DB_REPOSITORY} \
+                                --region ${env.AWS_REGION} \
+                                --filter tagStatus=TAGGED \
+                                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[?starts_with(@, \\`DEV-\\`)] | [0]' \
+                                --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
 
-                    def sourceTag = params.IMAGE_TAG.trim()
+                    if (!sourceTag ||
+                        sourceTag == 'None' ||
+                        sourceTag == 'null') {
+
+                        error("No DEV image found in ECR.")
+                    }
 
                     def sourceImage =
                         "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${sourceTag}"
@@ -184,43 +201,41 @@ pipeline {
                     def targetTag =
                         "UAT-${sourceTag.replaceFirst('^DEV-', '')}"
 
-                    env.IMAGE_TAG = targetTag
-
-                    env.IMAGE_URI =
+                    def targetImage =
                         "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${targetTag}"
 
-                    env.ECS_CLUSTER =
-                        'employee-managemet-uat-cluster'
-
-                    env.ECS_SERVICE =
-                        'employee-managemet-uat-db-service'
-
-                    env.ECS_TASK_FAMILY =
-                        'employee-managemet-uat-db'
-
                     echo "SOURCE IMAGE = ${sourceImage}"
-                    echo "TARGET IMAGE = ${env.IMAGE_URI}"
+                    echo "TARGET IMAGE = ${targetImage}"
 
                     sh """
                         set -e
 
                         aws ecr get-login-password \
-                            --region ${AWS_REGION} | \
+                            --region ${env.AWS_REGION} | \
                         docker login \
                             --username AWS \
-                            --password-stdin ${ECR_REGISTRY}
+                            --password-stdin ${env.ECR_REGISTRY}
 
                         docker pull ${sourceImage}
 
                         docker tag \
                             ${sourceImage} \
-                            ${env.IMAGE_URI}
+                            ${targetImage}
 
-                        docker push ${env.IMAGE_URI}
+                        docker push ${targetImage}
                     """
+
+                    env.IMAGE_URI = targetImage
                 }
             }
         }
+
+
+        /*
+         * ============================================================
+         * PROD - PROMOTE LATEST DEV IMAGE
+         * ============================================================
+         */
 
         stage('PROD - Promote Image') {
 
@@ -234,11 +249,24 @@ pipeline {
 
                 script {
 
-                    if (!params.IMAGE_TAG?.trim()) {
-                        error('IMAGE_TAG is required for PROD.')
-                    }
+                    def sourceTag = sh(
+                        script: """
+                            aws ecr describe-images \
+                                --repository-name ${env.DB_REPOSITORY} \
+                                --region ${env.AWS_REGION} \
+                                --filter tagStatus=TAGGED \
+                                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[?starts_with(@, \\`DEV-\\`)] | [0]' \
+                                --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
 
-                    def sourceTag = params.IMAGE_TAG.trim()
+                    if (!sourceTag ||
+                        sourceTag == 'None' ||
+                        sourceTag == 'null') {
+
+                        error("No DEV image found in ECR.")
+                    }
 
                     def sourceImage =
                         "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${sourceTag}"
@@ -246,49 +274,54 @@ pipeline {
                     def targetTag =
                         "PROD-${sourceTag.replaceFirst('^DEV-', '')}"
 
-                    env.IMAGE_TAG = targetTag
-
-                    env.IMAGE_URI =
+                    def targetImage =
                         "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${targetTag}"
 
-                    env.ECS_CLUSTER =
-                        'employee-managemet-prod-cluster'
-
-                    env.ECS_SERVICE =
-                        'employee-managemet-prod-db-service'
-
-                    env.ECS_TASK_FAMILY =
-                        'employee-managemet-prod-db'
-
                     echo "SOURCE IMAGE = ${sourceImage}"
-                    echo "TARGET IMAGE = ${env.IMAGE_URI}"
+                    echo "TARGET IMAGE = ${targetImage}"
 
                     sh """
                         set -e
 
                         aws ecr get-login-password \
-                            --region ${AWS_REGION} | \
+                            --region ${env.AWS_REGION} | \
                         docker login \
                             --username AWS \
-                            --password-stdin ${ECR_REGISTRY}
+                            --password-stdin ${env.ECR_REGISTRY}
 
                         docker pull ${sourceImage}
 
                         docker tag \
                             ${sourceImage} \
-                            ${env.IMAGE_URI}
+                            ${targetImage}
 
-                        docker push ${env.IMAGE_URI}
+                        docker push ${targetImage}
                     """
+
+                    env.IMAGE_URI = targetImage
                 }
             }
         }
+
+
+        /*
+         * ============================================================
+         * CREATE TASK DEFINITION
+         * ============================================================
+         */
 
         stage('Create Task Definition') {
 
             steps {
 
                 script {
+
+                    if (!env.IMAGE_URI?.trim()) {
+                        error("IMAGE_URI is empty.")
+                    }
+
+                    echo "IMAGE URI = ${env.IMAGE_URI}"
+                    echo "ENVIRONMENT = ${params.ENVIRONMENT}"
 
                     sh """
                         set -e
@@ -310,7 +343,8 @@ image_uri = os.environ["IMAGE_URI"]
 with open(input_file, "r") as f:
     task_definition = json.load(f)
 
-task_definition["family"] = f"employee-managemet-{environment}-db"
+task_definition["family"] = \
+    f"employee-managemet-{environment}-db"
 
 for container in task_definition["containerDefinitions"]:
 
@@ -325,160 +359,91 @@ with open(output_file, "w") as f:
     json.dump(task_definition, f, indent=2)
 
 PY
+
+                        echo "Generated task definition:"
+                        cat new-db-task-definition.json
                     """
                 }
             }
         }
 
-       stage('Register Task Definition') {
-    steps {
-        script {
 
-            def revision = sh(
-                script: """
-                    set -e
+        /*
+         * ============================================================
+         * REGISTER + UPDATE ECS SERVICE
+         *
+         * IMPORTANT:
+         * Revision is kept in a LOCAL Groovy variable.
+         * It is NOT stored in env.NEW_REVISION.
+         * ============================================================
+         */
 
-                    aws ecs register-task-definition \
-                        --cli-input-json file://new-db-task-definition.json \
-                        --region ${env.AWS_REGION} \
-                        --query 'taskDefinition.revision' \
-                        --output text
-                """,
-                returnStdout: true
-            ).trim()
-
-            echo "AWS RETURNED REVISION = '${revision}'"
-
-            if (!revision || revision == "null" || revision == "None") {
-                error("ECS returned an invalid task definition revision: '${revision}'")
-            }
-
-            env.NEW_REVISION = revision
-
-            echo "NEW ECS TASK REVISION = '${env.NEW_REVISION}'"
-        }
-    }
-}
-
-        stage('DEV - Update Service') {
-    when {
-        expression {
-            params.ENVIRONMENT == 'dev'
-        }
-    }
-
-    steps {
-        script {
-
-            if (!env.NEW_REVISION ||
-                env.NEW_REVISION == "null" ||
-                env.NEW_REVISION == "None") {
-
-                error("Invalid NEW_REVISION: '${env.NEW_REVISION}'")
-            }
-
-            echo "Updating DEV service with revision: ${env.NEW_REVISION}"
-
-            sh """
-                set -e
-
-                aws ecs update-service \
-                    --cluster employee-managemet-dev-cluster \
-                    --service employee-managemet-dev-db-service \
-                    --task-definition employee-managemet-dev-db:${env.NEW_REVISION} \
-                    --force-new-deployment \
-                    --region ${env.AWS_REGION}
-
-                aws ecs wait services-stable \
-                    --cluster employee-managemet-dev-cluster \
-                    --services employee-managemet-dev-db-service \
-                    --region ${env.AWS_REGION}
-            """
-        }
-    }
-}
-
-        stage('QA - Update Service') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'qa'
-                }
-            }
+        stage('Register and Update ECS Service') {
 
             steps {
 
-                sh '''
-                    set -e
+                script {
 
-                    aws ecs update-service \
-                        --cluster employee-managemet-qa-cluster \
-                        --service employee-managemet-qa-db-service \
-                        --task-definition employee-managemet-qa-db:${NEW_REVISION} \
-                        --force-new-deployment \
-                        --region ${AWS_REGION}
+                    def revision = sh(
+                        script: """
+                            set -e
 
-                    aws ecs wait services-stable \
-                        --cluster employee-managemet-qa-cluster \
-                        --services employee-managemet-qa-db-service \
-                        --region ${AWS_REGION}
-                '''
-            }
-        }
+                            aws ecs register-task-definition \
+                                --cli-input-json file://new-db-task-definition.json \
+                                --region ${env.AWS_REGION} \
+                                --query 'taskDefinition.revision' \
+                                --output text
+                        """,
+                        returnStdout: true
+                    ).trim()
 
-        stage('UAT - Update Service') {
+                    echo "AWS REGISTERED REVISION = '${revision}'"
 
-            when {
-                expression {
-                    params.ENVIRONMENT == 'uat'
+                    if (!revision ||
+                        revision == 'null' ||
+                        revision == 'None') {
+
+                        error(
+                            "ECS returned invalid revision: '${revision}'"
+                        )
+                    }
+
+                    def environment =
+                        params.ENVIRONMENT
+
+                    def cluster =
+                        "employee-managemet-${environment}-cluster"
+
+                    def service =
+                        "employee-managemet-${environment}-db-service"
+
+                    def taskFamily =
+                        "employee-managemet-${environment}-db"
+
+                    echo "ENVIRONMENT = ${environment}"
+                    echo "CLUSTER = ${cluster}"
+                    echo "SERVICE = ${service}"
+                    echo "TASK FAMILY = ${taskFamily}"
+                    echo "TASK REVISION = ${revision}"
+
+                    sh """
+                        set -e
+
+                        aws ecs update-service \
+                            --cluster ${cluster} \
+                            --service ${service} \
+                            --task-definition ${taskFamily}:${revision} \
+                            --force-new-deployment \
+                            --region ${env.AWS_REGION}
+
+                        aws ecs wait services-stable \
+                            --cluster ${cluster} \
+                            --services ${service} \
+                            --region ${env.AWS_REGION}
+                    """
+
+                    echo "ECS ${environment} deployment completed successfully."
                 }
-            }
-
-            steps {
-
-                sh '''
-                    set -e
-
-                    aws ecs update-service \
-                        --cluster employee-managemet-uat-cluster \
-                        --service employee-managemet-uat-db-service \
-                        --task-definition employee-managemet-uat-db:${NEW_REVISION} \
-                        --force-new-deployment \
-                        --region ${AWS_REGION}
-
-                    aws ecs wait services-stable \
-                        --cluster employee-managemet-uat-cluster \
-                        --services employee-managemet-uat-db-service \
-                        --region ${AWS_REGION}
-                '''
-            }
-        }
-
-        stage('PROD - Update Service') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'prod'
-                }
-            }
-
-            steps {
-
-                sh '''
-                    set -e
-
-                    aws ecs update-service \
-                        --cluster employee-managemet-prod-cluster \
-                        --service employee-managemet-prod-db-service \
-                        --task-definition employee-managemet-prod-db:${NEW_REVISION} \
-                        --force-new-deployment \
-                        --region ${AWS_REGION}
-
-                    aws ecs wait services-stable \
-                        --cluster employee-managemet-prod-cluster \
-                        --services employee-managemet-prod-db-service \
-                        --region ${AWS_REGION}
-                '''
             }
         }
     }
