@@ -23,8 +23,7 @@ pipeline {
         AWS_REGION     = 'us-east-1'
         AWS_ACCOUNT_ID = '552940445807'
 
-        ECR_REGISTRY =
-            "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
         FRONTEND_REPOSITORY = 'employee-management-frontend'
         BACKEND_REPOSITORY  = 'employee-management-backend'
@@ -32,8 +31,7 @@ pipeline {
 
         BUILD_CONTEXT = './db'
 
-        TASK_DEFINITION_TEMPLATE =
-            './db/task-definition.json'
+        TASK_DEFINITION_TEMPLATE = './db/task-definition.json'
 
         IMAGE_URI       = ''
         IMAGE_TAG       = ''
@@ -45,42 +43,55 @@ pipeline {
 
     stages {
 
+        stage('DEV - Build and Push') {
 
-      
-stage('DEV - Build and Push') {
-    when {
-        expression {
-            params.ENVIRONMENT == 'dev'
+            when {
+                expression {
+                    params.ENVIRONMENT == 'dev'
+                }
+            }
+
+            steps {
+
+                script {
+
+                    def commitId = sh(
+                        script: 'git rev-parse --short=7 HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    env.IMAGE_TAG = "DEV-${commitId}"
+
+                    env.IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${env.IMAGE_TAG}"
+
+                    env.ECS_CLUSTER =
+                        'employee-managemet-dev-cluster'
+
+                    env.ECS_SERVICE =
+                        'employee-managemet-dev-db-service'
+
+                    env.ECS_TASK_FAMILY =
+                        'employee-managemet-dev-db'
+
+                    sh '''
+                        set -e
+
+                        aws ecr get-login-password \
+                            --region ${AWS_REGION} | \
+                        docker login \
+                            --username AWS \
+                            --password-stdin ${ECR_REGISTRY}
+
+                        docker build \
+                            -t ${IMAGE_URI} \
+                            ${BUILD_CONTEXT}
+
+                        docker push ${IMAGE_URI}
+                    '''
+                }
+            }
         }
-    }
-    steps {
-        script {
-            def commitId = sh(
-                script: 'git rev-parse --short=7 HEAD',
-                returnStdout: true
-            ).trim()
-
-            env.IMAGE_TAG = "DEV-${commitId}"
-            env.IMAGE_URI = "${env.ECR_REGISTRY}/${env.DB_REPOSITORY}:${env.IMAGE_TAG}"
-
-            env.ECS_CLUSTER = 'employee-managemet-dev-cluster'
-            env.ECS_SERVICE = 'employee-managemet-dev-db-service'
-            env.ECS_TASK_FAMILY = 'employee-managemet-dev-db'
-
-            sh '''
-                set -e
-
-                aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
-
-                docker build -t ${IMAGE_URI} ${BUILD_CONTEXT}
-
-                docker push ${IMAGE_URI}
-            '''
-        }
-    }
-}
-
-
 
         stage('QA - Promote Image') {
 
@@ -141,7 +152,6 @@ stage('DEV - Build and Push') {
             }
         }
 
-
         stage('UAT - Promote Image') {
 
             when {
@@ -200,7 +210,6 @@ stage('DEV - Build and Push') {
                 }
             }
         }
-
 
         stage('PROD - Promote Image') {
 
@@ -261,16 +270,18 @@ stage('DEV - Build and Push') {
             }
         }
 
-
         stage('Create Task Definition') {
 
             steps {
 
                 script {
 
-                    sh '''
+                    sh """
                         set -e
 
+                        ENVIRONMENT="${params.ENVIRONMENT}" \
+                        IMAGE_URI="${env.IMAGE_URI}" \
+                        TASK_DEFINITION_TEMPLATE="${env.TASK_DEFINITION_TEMPLATE}" \
                         python3 - <<'PY'
 
 import json
@@ -285,8 +296,7 @@ image_uri = os.environ["IMAGE_URI"]
 with open(input_file, "r") as f:
     task_definition = json.load(f)
 
-task_definition["family"] = \
-    f"employee-managemet-{environment}-db"
+task_definition["family"] = f"employee-managemet-{environment}-db"
 
 for container in task_definition["containerDefinitions"]:
 
@@ -295,19 +305,16 @@ for container in task_definition["containerDefinitions"]:
         break
 
 else:
-    raise Exception(
-        "Container named 'db' was not found."
-    )
+    raise Exception("Container named 'db' was not found.")
 
 with open(output_file, "w") as f:
     json.dump(task_definition, f, indent=2)
 
 PY
-                    '''
+                    """
                 }
             }
         }
-
 
         stage('Register Task Definition') {
 
@@ -328,7 +335,6 @@ PY
                 }
             }
         }
-
 
         stage('DEV - Update Service') {
 
@@ -358,7 +364,6 @@ PY
             }
         }
 
-
         stage('QA - Update Service') {
 
             when {
@@ -387,7 +392,6 @@ PY
             }
         }
 
-
         stage('UAT - Update Service') {
 
             when {
@@ -415,7 +419,6 @@ PY
                 '''
             }
         }
-
 
         stage('PROD - Update Service') {
 
