@@ -359,32 +359,39 @@ PY
 }
 
         stage('DEV - Update Service') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'dev'
-                }
-            }
-
-            steps {
-
-                sh '''
-                    set -e
-
-                    aws ecs update-service \
-                        --cluster employee-managemet-dev-cluster \
-                        --service employee-managemet-dev-db-service \
-                        --task-definition employee-managemet-dev-db:${NEW_REVISION} \
-                        --force-new-deployment \
-                        --region ${AWS_REGION}
-
-                    aws ecs wait services-stable \
-                        --cluster employee-managemet-dev-cluster \
-                        --services employee-managemet-dev-db-service \
-                        --region ${AWS_REGION}
-                '''
-            }
+    when {
+        expression {
+            params.ENVIRONMENT == 'dev'
         }
+    }
+
+    steps {
+        script {
+
+            if (!env.NEW_REVISION?.trim()) {
+                error("NEW_REVISION is empty. Cannot update ECS service.")
+            }
+
+            echo "Updating DEV ECS service with revision: ${env.NEW_REVISION}"
+
+            sh """
+                set -e
+
+                aws ecs update-service \
+                    --cluster employee-managemet-dev-cluster \
+                    --service employee-managemet-dev-db-service \
+                    --task-definition employee-managemet-dev-db:${env.NEW_REVISION} \
+                    --force-new-deployment \
+                    --region ${env.AWS_REGION}
+
+                aws ecs wait services-stable \
+                    --cluster employee-managemet-dev-cluster \
+                    --services employee-managemet-dev-db-service \
+                    --region ${env.AWS_REGION}
+            """
+        }
+    }
+}
 
         stage('QA - Update Service') {
 
