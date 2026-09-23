@@ -72,6 +72,10 @@ pipeline {
                     env.ECS_TASK_FAMILY =
                         'employee-managemet-dev-db'
 
+                    echo "IMAGE_TAG = ${env.IMAGE_TAG}"
+                    echo "IMAGE_URI = ${env.IMAGE_URI}"
+                    echo "BUILD_CONTEXT = ${env.BUILD_CONTEXT}"
+
                     sh '''
                         set -e
 
@@ -129,6 +133,9 @@ pipeline {
                     env.ECS_TASK_FAMILY =
                         'employee-managemet-qa-db'
 
+                    echo "SOURCE IMAGE = ${sourceImage}"
+                    echo "TARGET IMAGE = ${env.IMAGE_URI}"
+
                     sh """
                         set -e
 
@@ -142,9 +149,9 @@ pipeline {
 
                         docker tag \
                             ${sourceImage} \
-                            ${IMAGE_URI}
+                            ${env.IMAGE_URI}
 
-                        docker push ${IMAGE_URI}
+                        docker push ${env.IMAGE_URI}
                     """
                 }
             }
@@ -188,6 +195,9 @@ pipeline {
                     env.ECS_TASK_FAMILY =
                         'employee-managemet-uat-db'
 
+                    echo "SOURCE IMAGE = ${sourceImage}"
+                    echo "TARGET IMAGE = ${env.IMAGE_URI}"
+
                     sh """
                         set -e
 
@@ -201,9 +211,9 @@ pipeline {
 
                         docker tag \
                             ${sourceImage} \
-                            ${IMAGE_URI}
+                            ${env.IMAGE_URI}
 
-                        docker push ${IMAGE_URI}
+                        docker push ${env.IMAGE_URI}
                     """
                 }
             }
@@ -247,6 +257,9 @@ pipeline {
                     env.ECS_TASK_FAMILY =
                         'employee-managemet-prod-db'
 
+                    echo "SOURCE IMAGE = ${sourceImage}"
+                    echo "TARGET IMAGE = ${env.IMAGE_URI}"
+
                     sh """
                         set -e
 
@@ -260,9 +273,9 @@ pipeline {
 
                         docker tag \
                             ${sourceImage} \
-                            ${IMAGE_URI}
+                            ${env.IMAGE_URI}
 
-                        docker push ${IMAGE_URI}
+                        docker push ${env.IMAGE_URI}
                     """
                 }
             }
@@ -322,6 +335,8 @@ PY
 
                     env.NEW_REVISION = sh(
                         script: '''
+                            set -e
+
                             aws ecs register-task-definition \
                                 --cli-input-json file://new-db-task-definition.json \
                                 --region ${AWS_REGION} \
@@ -330,6 +345,8 @@ PY
                         ''',
                         returnStdout: true
                     ).trim()
+
+                    echo "NEW ECS TASK REVISION = ${env.NEW_REVISION}"
                 }
             }
         }
