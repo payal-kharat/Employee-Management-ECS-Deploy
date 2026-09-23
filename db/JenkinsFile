@@ -25,9 +25,7 @@ pipeline {
 
         ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-        FRONTEND_REPOSITORY = 'employee-management-frontend'
-        BACKEND_REPOSITORY  = 'employee-management-backend'
-        DB_REPOSITORY       = 'employee-management-db'
+        DB_REPOSITORY = 'employee-management-db'
 
         BUILD_CONTEXT = './db'
 
