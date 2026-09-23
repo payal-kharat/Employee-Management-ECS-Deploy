@@ -68,20 +68,23 @@ pipeline {
                     sh """
                         set -e
 
+                        echo "Logging in to ECR..."
+
                         aws ecr get-login-password \
                             --region ${env.AWS_REGION} | \
                         docker login \
                             --username AWS \
                             --password-stdin ${env.ECR_REGISTRY}
 
-                       sh """
-    docker build \
-        -t ${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${imageTag} \
-        ./frontend
+                        echo "Building backend Docker image..."
 
-    docker push \
-        ${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${imageTag}
-"""
+                        docker build \
+                            -t ${imageUri} \
+                            ${env.BUILD_CONTEXT}
+
+                        echo "Pushing backend Docker image..."
+
+                        docker push ${imageUri}
                     """
 
                     env.IMAGE_URI = imageUri
@@ -355,14 +358,23 @@ task_definition["family"] = \
 for container in task_definition["containerDefinitions"]:
 
     if container["name"] == "backend":
+
         container["image"] = image_uri
         break
 
 else:
-    raise Exception("Container named 'backend' was not found.")
+
+    raise Exception(
+        "Container named 'backend' was not found."
+    )
 
 with open(output_file, "w") as f:
-    json.dump(task_definition, f, indent=2)
+
+    json.dump(
+        task_definition,
+        f,
+        indent=2
+    )
 
 PY
 
@@ -378,9 +390,7 @@ PY
          * ============================================================
          * REGISTER + UPDATE ECS SERVICE
          *
-         * IMPORTANT:
-         * Revision is kept in a LOCAL Groovy variable.
-         * It is NOT stored in env.NEW_REVISION.
+         * Revision is stored in a LOCAL Groovy variable.
          * ============================================================
          */
 
@@ -454,6 +464,12 @@ PY
         }
     }
 
+
+    /*
+     * ================================================================
+     * POST
+     * ================================================================
+     */
 
     post {
 
