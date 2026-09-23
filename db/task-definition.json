@@ -1,4 +1,3 @@
-
 {
   "containerDefinitions": [
     {
@@ -17,7 +16,15 @@
       "environment": [
         {
           "name": "MYSQL_DATABASE",
-          "value": "example"
+          "value": "employee_db"
+        },
+        {
+          "name": "MYSQL_USER",
+          "value": "employee_user"
+        },
+        {
+          "name": "MYSQL_PASSWORD",
+          "value": "employee123"
         },
         {
           "name": "MYSQL_ROOT_PASSWORD",
