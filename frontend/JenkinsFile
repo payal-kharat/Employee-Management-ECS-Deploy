@@ -1,0 +1,462 @@
+
+pipeline {
+
+    agent any
+
+    parameters {
+
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'qa', 'uat', 'prod'],
+            description: 'Select environment'
+        )
+
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: '',
+            description: 'For QA/UAT/PROD enter source image tag'
+        )
+    }
+
+    environment {
+
+        AWS_REGION     = 'us-east-1'
+        AWS_ACCOUNT_ID = '552940445807'
+
+        ECR_REGISTRY =
+            "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+        FRONTEND_REPOSITORY = 'employee-management-frontend'
+        BACKEND_REPOSITORY  = 'employee-management-backend'
+        DB_REPOSITORY       = 'employee-management-db'
+
+        BUILD_CONTEXT = './frontend'
+
+        TASK_DEFINITION_TEMPLATE =
+            './frontend/task-definition.json'
+
+        IMAGE_URI       = ''
+        IMAGE_TAG       = ''
+        ECS_CLUSTER     = ''
+        ECS_SERVICE     = ''
+        ECS_TASK_FAMILY = ''
+        NEW_REVISION    = ''
+    }
+
+    stages {
+
+        stage('DEV - Build and Push') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'dev'
+                }
+            }
+
+            steps {
+
+                script {
+
+                    def commitId = sh(
+                        script: 'git rev-parse --short=7 HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    env.IMAGE_TAG = "DEV-${commitId}"
+
+                    env.IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${env.IMAGE_TAG}"
+
+                    env.ECS_CLUSTER =
+                        'employee-managemet-dev-cluster'
+
+                    env.ECS_SERVICE =
+                        'employee-managemet-dev-frontend-service'
+
+                    env.ECS_TASK_FAMILY =
+                        'employee-managemet-dev-frontend'
+
+                    sh '''
+                        set -e
+
+                        aws ecr get-login-password \
+                            --region ${AWS_REGION} | \
+                        docker login \
+                            --username AWS \
+                            --password-stdin ${ECR_REGISTRY}
+
+                        docker build \
+                            -t ${IMAGE_URI} \
+                            ${BUILD_CONTEXT}
+
+                        docker push ${IMAGE_URI}
+                    '''
+                }
+            }
+        }
+
+
+        stage('QA - Promote Image') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'qa'
+                }
+            }
+
+            steps {
+
+                script {
+
+                    if (!params.IMAGE_TAG?.trim()) {
+                        error('IMAGE_TAG is required for QA.')
+                    }
+
+                    def sourceTag = params.IMAGE_TAG.trim()
+
+                    def sourceImage =
+                        "${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${sourceTag}"
+
+                    def targetTag =
+                        "QA-${sourceTag.replaceFirst('^DEV-', '')}"
+
+                    env.IMAGE_TAG = targetTag
+
+                    env.IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${targetTag}"
+
+                    env.ECS_CLUSTER =
+                        'employee-managemet-qa-cluster'
+
+                    env.ECS_SERVICE =
+                        'employee-managemet-qa-frontend-service'
+
+                    env.ECS_TASK_FAMILY =
+                        'employee-managemet-qa-frontend'
+
+                    sh """
+                        set -e
+
+                        aws ecr get-login-password \
+                            --region ${AWS_REGION} | \
+                        docker login \
+                            --username AWS \
+                            --password-stdin ${ECR_REGISTRY}
+
+                        docker pull ${sourceImage}
+
+                        docker tag \
+                            ${sourceImage} \
+                            ${IMAGE_URI}
+
+                        docker push ${IMAGE_URI}
+                    """
+                }
+            }
+        }
+
+
+        stage('UAT - Promote Image') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'uat'
+                }
+            }
+
+            steps {
+
+                script {
+
+                    if (!params.IMAGE_TAG?.trim()) {
+                        error('IMAGE_TAG is required for UAT.')
+                    }
+
+                    def sourceTag = params.IMAGE_TAG.trim()
+
+                    def sourceImage =
+                        "${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${sourceTag}"
+
+                    def targetTag =
+                        "UAT-${sourceTag.replaceFirst('^DEV-', '')}"
+
+                    env.IMAGE_TAG = targetTag
+
+                    env.IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${targetTag}"
+
+                    env.ECS_CLUSTER =
+                        'employee-managemet-uat-cluster'
+
+                    env.ECS_SERVICE =
+                        'employee-managemet-uat-frontend-service'
+
+                    env.ECS_TASK_FAMILY =
+                        'employee-managemet-uat-frontend'
+
+                    sh """
+                        set -e
+
+                        aws ecr get-login-password \
+                            --region ${AWS_REGION} | \
+                        docker login \
+                            --username AWS \
+                            --password-stdin ${ECR_REGISTRY}
+
+                        docker pull ${sourceImage}
+
+                        docker tag \
+                            ${sourceImage} \
+                            ${IMAGE_URI}
+
+                        docker push ${IMAGE_URI}
+                    """
+                }
+            }
+        }
+
+
+        stage('PROD - Promote Image') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'prod'
+                }
+            }
+
+            steps {
+
+                script {
+
+                    if (!params.IMAGE_TAG?.trim()) {
+                        error('IMAGE_TAG is required for PROD.')
+                    }
+
+                    def sourceTag = params.IMAGE_TAG.trim()
+
+                    def sourceImage =
+                        "${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${sourceTag}"
+
+                    def targetTag =
+                        "PROD-${sourceTag.replaceFirst('^DEV-', '')}"
+
+                    env.IMAGE_TAG = targetTag
+
+                    env.IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.FRONTEND_REPOSITORY}:${targetTag}"
+
+                    env.ECS_CLUSTER =
+                        'employee-managemet-prod-cluster'
+
+                    env.ECS_SERVICE =
+                        'employee-managemet-prod-frontend-service'
+
+                    env.ECS_TASK_FAMILY =
+                        'employee-managemet-prod-frontend'
+
+                    sh """
+                        set -e
+
+                        aws ecr get-login-password \
+                            --region ${AWS_REGION} | \
+                        docker login \
+                            --username AWS \
+                            --password-stdin ${ECR_REGISTRY}
+
+                        docker pull ${sourceImage}
+
+                        docker tag \
+                            ${sourceImage} \
+                            ${IMAGE_URI}
+
+                        docker push ${IMAGE_URI}
+                    """
+                }
+            }
+        }
+
+
+        stage('Create Task Definition') {
+
+            steps {
+
+                script {
+
+                    sh '''
+                        set -e
+
+                        python3 - <<'PY'
+
+import json
+import os
+
+input_file = os.environ["TASK_DEFINITION_TEMPLATE"]
+output_file = "new-frontend-task-definition.json"
+
+environment = os.environ["ENVIRONMENT"]
+image_uri = os.environ["IMAGE_URI"]
+
+with open(input_file, "r") as f:
+    task_definition = json.load(f)
+
+task_definition["family"] = \
+    f"employee-managemet-{environment}-frontend"
+
+for container in task_definition["containerDefinitions"]:
+
+    if container["name"] == "frontend":
+        container["image"] = image_uri
+        break
+
+else:
+    raise Exception(
+        "Container named 'frontend' was not found."
+    )
+
+with open(output_file, "w") as f:
+    json.dump(task_definition, f, indent=2)
+
+PY
+                    '''
+                }
+            }
+        }
+
+
+        stage('Register Task Definition') {
+
+            steps {
+
+                script {
+
+                    env.NEW_REVISION = sh(
+                        script: '''
+                            aws ecs register-task-definition \
+                                --cli-input-json file://new-frontend-task-definition.json \
+                                --region ${AWS_REGION} \
+                                --query 'taskDefinition.revision' \
+                                --output text
+                        ''',
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+        }
+
+
+        stage('DEV - Update Service') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'dev'
+                }
+            }
+
+            steps {
+
+                sh '''
+                    set -e
+
+                    aws ecs update-service \
+                        --cluster employee-managemet-dev-cluster \
+                        --service employee-managemet-dev-frontend-service \
+                        --task-definition employee-managemet-dev-frontend:${NEW_REVISION} \
+                        --force-new-deployment \
+                        --region ${AWS_REGION}
+
+                    aws ecs wait services-stable \
+                        --cluster employee-managemet-dev-cluster \
+                        --services employee-managemet-dev-frontend-service \
+                        --region ${AWS_REGION}
+                '''
+            }
+        }
+
+
+        stage('QA - Update Service') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'qa'
+                }
+            }
+
+            steps {
+
+                sh '''
+                    set -e
+
+                    aws ecs update-service \
+                        --cluster employee-managemet-qa-cluster \
+                        --service employee-managemet-qa-frontend-service \
+                        --task-definition employee-managemet-qa-frontend:${NEW_REVISION} \
+                        --force-new-deployment \
+                        --region ${AWS_REGION}
+
+                    aws ecs wait services-stable \
+                        --cluster employee-managemet-qa-cluster \
+                        --services employee-managemet-qa-frontend-service \
+                        --region ${AWS_REGION}
+                '''
+            }
+        }
+
+
+        stage('UAT - Update Service') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'uat'
+                }
+            }
+
+            steps {
+
+                sh '''
+                    set -e
+
+                    aws ecs update-service \
+                        --cluster employee-managemet-uat-cluster \
+                        --service employee-managemet-uat-frontend-service \
+                        --task-definition employee-managemet-uat-frontend:${NEW_REVISION} \
+                        --force-new-deployment \
+                        --region ${AWS_REGION}
+
+                    aws ecs wait services-stable \
+                        --cluster employee-managemet-uat-cluster \
+                        --services employee-managemet-uat-frontend-service \
+                        --region ${AWS_REGION}
+                '''
+            }
+        }
+
+
+        stage('PROD - Update Service') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'prod'
+                }
+            }
+
+            steps {
+
+                sh '''
+                    set -e
+
+                    aws ecs update-service \
+                        --cluster employee-managemet-prod-cluster \
+                        --service employee-managemet-prod-frontend-service \
+                        --task-definition employee-managemet-prod-frontend:${NEW_REVISION} \
+                        --force-new-deployment \
+                        --region ${AWS_REGION}
+
+                    aws ecs wait services-stable \
+                        --cluster employee-managemet-prod-cluster \
+                        --services employee-managemet-prod-frontend-service \
+                        --region ${AWS_REGION}
+                '''
+            }
+        }
+    }
+}
