@@ -506,9 +506,9 @@ PYTHON
 
 
             aws ecs update-service \
-                --cluster employee-managemet-${environment}-cluster \
-                --service employee-managemet-${environment}-db-service \
-                --task-definition employee-managemet-${environment}-db:\$REVISION \
+                --cluster employee-mgm-${environment}-cluster \
+                --service employee-mgm-${environment}-db-service \
+                --task-definition employee-mgm-${environment}-db:\$REVISION \
                 --force-new-deployment \
                 --region ${env.AWS_REGION}
 
@@ -517,8 +517,8 @@ PYTHON
 
 
             aws ecs wait services-stable \
-                --cluster employee-managemet-${environment}-cluster \
-                --services employee-managemet-${environment}-db-service \
+                --cluster employee-mgm-${environment}-cluster \
+                --services employee-mgm-${environment}-db-service \
                 --region ${env.AWS_REGION}
 
 
