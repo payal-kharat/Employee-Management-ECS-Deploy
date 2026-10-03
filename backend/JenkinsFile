@@ -3,370 +3,427 @@ pipeline {
 
     agent any
 
-    parameters {
-
-        choice(
-            name: 'ENVIRONMENT',
-            choices: ['dev', 'qa', 'uat', 'prod'],
-            description: 'Select environment'
-        )
-    }
-
     environment {
 
         AWS_REGION     = 'us-east-1'
         AWS_ACCOUNT_ID = '552940445807'
 
+        AWS_CRED = 'AWS'
+
         ECR_REGISTRY =
             "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-        BACKEND_REPOSITORY =
-            'employee-managemet-backend'
+        DEV_REPO  = 'employee-mgm-dev-backend'
+        // QA_REPO   = 'employee-mgm-qa-backend'
+        // UAT_REPO  = 'employee-managemet-uat-backend'
+        // PROD_REPO = 'employee-managemet-prod-backend'
 
-        BUILD_CONTEXT =
-            './backend'
+        BUILD_CONTEXT ='./backend'
 
-        TASK_DEFINITION_TEMPLATE =
-            './backend/task-definition.json'
+        TASK_DEFINITION_TEMPLATE ='./backend/task-definition.json'
     }
 
+
     stages {
-
-        /*
-         * ============================================================
-         * DEV - BUILD AND PUSH
-         * ============================================================
-         */
-
-        stage('DEV - Build and Push') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'dev'
-                }
-            }
-
+        stage('Checkout') {
             steps {
-
+                checkout scm
                 script {
+                    env.COMMIT_ID =
+                        sh(
+                            script: 'git rev-parse --short=7 HEAD',
+                            returnStdout: true
+                        ).trim()
 
-                    def commitId = sh(
-                        script: 'git rev-parse --short=7 HEAD',
-                        returnStdout: true
-                    ).trim()
-
-                    def imageTag =
-                        "DEV-${commitId}"
-
-                    def imageUri =
-                        "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${imageTag}"
-
-                    echo "ENVIRONMENT = dev"
-                    echo "IMAGE TAG = ${imageTag}"
-                    echo "IMAGE URI = ${imageUri}"
-
-                    sh """
-                        set -e
-
-                        echo "Logging in to ECR..."
-
-                        aws ecr get-login-password \
-                            --region ${env.AWS_REGION} | \
-                        docker login \
-                            --username AWS \
-                            --password-stdin ${env.ECR_REGISTRY}
-
-                        echo "Building backend Docker image..."
-
-                        docker build \
-                            -t ${imageUri} \
-                            ${env.BUILD_CONTEXT}
-
-                        echo "Pushing backend Docker image..."
-
-                        docker push ${imageUri}
-                    """
-
-                    env.IMAGE_URI = imageUri
+                    echo "======================================"
+                    echo "COMMIT ID = ${env.COMMIT_ID}"
+                    echo "======================================"
                 }
             }
         }
 
 
-        /*
-         * ============================================================
-         * QA - PROMOTE LATEST DEV IMAGE
-         * ============================================================
-         */
-
-        stage('QA - Promote Image') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'qa'
-                }
-            }
-
+        stage('DEV - Build Image') {
             steps {
-
                 script {
+                    def imageTag ="DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
+                    env.DEV_IMAGE_TAG =imageTag
+                    def imageUri ="${env.ECR_REGISTRY}/${env.DEV_REPO}:${imageTag}"
+                    env.DEV_IMAGE_URI =imageUri
 
-                    def sourceTag = sh(
-                        script: """
-                            aws ecr describe-images \
-                                --repository-name ${env.BACKEND_REPOSITORY} \
-                                --region ${env.AWS_REGION} \
-                                --filter tagStatus=TAGGED \
-                                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[?starts_with(@, \\`DEV-\\`)] | [0]' \
-                                --output text
-                        """,
-                        returnStdout: true
-                    ).trim()
 
-                    if (!sourceTag ||
-                        sourceTag == 'None' ||
-                        sourceTag == 'null') {
+                    echo "======================================"
+                    echo "BUILD ENVIRONMENT = DEV"
+                    echo "COMMIT ID         = ${env.COMMIT_ID}"
+                    echo "IMAGE TAG         = ${imageTag}"
+                    echo "DEV REPOSITORY    = ${env.DEV_REPO}"
+                    echo "IMAGE URI         = ${imageUri}"
+                    echo "======================================"
 
-                        error("No DEV image found in ECR.")
+
+                    echo "Building Employee Management Backend Docker image..."
+                    docker.withRegistry(
+                        "https://${env.ECR_REGISTRY}",
+                        "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
+                    ) {
+
+                        docker.build(
+                            imageUri,
+                            env.BUILD_CONTEXT
+                        )
                     }
-
-                    def sourceImage =
-                        "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${sourceTag}"
-
-                    def targetTag =
-                        "QA-${sourceTag.replaceFirst('^DEV-', '')}"
-
-                    def targetImage =
-                        "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${targetTag}"
-
-                    echo "SOURCE IMAGE = ${sourceImage}"
-                    echo "TARGET IMAGE = ${targetImage}"
-
-                    sh """
-                        set -e
-
-                        aws ecr get-login-password \
-                            --region ${env.AWS_REGION} | \
-                        docker login \
-                            --username AWS \
-                            --password-stdin ${env.ECR_REGISTRY}
-
-                        docker pull ${sourceImage}
-
-                        docker tag \
-                            ${sourceImage} \
-                            ${targetImage}
-
-                        docker push ${targetImage}
-                    """
-
-                    env.IMAGE_URI = targetImage
+                    echo "Employee Management Backend Docker image built successfully."
                 }
             }
         }
 
 
-        /*
-         * ============================================================
-         * UAT - PROMOTE LATEST DEV IMAGE
-         * ============================================================
-         */
-
-        stage('UAT - Promote Image') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'uat'
-                }
-            }
-
+        stage('DEV - Push Image') {
             steps {
-
                 script {
-
-                    def sourceTag = sh(
-                        script: """
-                            aws ecr describe-images \
-                                --repository-name ${env.BACKEND_REPOSITORY} \
-                                --region ${env.AWS_REGION} \
-                                --filter tagStatus=TAGGED \
-                                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[?starts_with(@, \\`DEV-\\`)] | [0]' \
-                                --output text
-                        """,
-                        returnStdout: true
-                    ).trim()
-
-                    if (!sourceTag ||
-                        sourceTag == 'None' ||
-                        sourceTag == 'null') {
-
-                        error("No DEV image found in ECR.")
+                    if (!env.DEV_IMAGE_URI?.trim()) {
+                        error(
+                            "DEV_IMAGE_URI is empty. " +
+                            "DEV image was not built successfully."
+                        )
                     }
 
-                    def sourceImage =
-                        "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${sourceTag}"
 
-                    def targetTag =
-                        "UAT-${sourceTag.replaceFirst('^DEV-', '')}"
+                    echo "======================================"
+                    echo "PUSHING EMPLOYEE MANAGEMENT BACKEND IMAGE"
+                    echo "DEV REPOSITORY = ${env.DEV_REPO}"
+                    echo "IMAGE URI       = ${env.DEV_IMAGE_URI}"
+                    echo "======================================"
 
-                    def targetImage =
-                        "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${targetTag}"
 
-                    echo "SOURCE IMAGE = ${sourceImage}"
-                    echo "TARGET IMAGE = ${targetImage}"
+                    docker.withRegistry(
+                        "https://${env.ECR_REGISTRY}",
+                        "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
+                    ) {
 
-                    sh """
-                        set -e
-
-                        aws ecr get-login-password \
-                            --region ${env.AWS_REGION} | \
-                        docker login \
-                            --username AWS \
-                            --password-stdin ${env.ECR_REGISTRY}
-
-                        docker pull ${sourceImage}
-
-                        docker tag \
-                            ${sourceImage} \
-                            ${targetImage}
-
-                        docker push ${targetImage}
-                    """
-
-                    env.IMAGE_URI = targetImage
+                        docker.image(
+                            env.DEV_IMAGE_URI
+                        ).push()
+                    }
+                    echo "Employee Management Backend DEV image pushed successfully."
                 }
             }
         }
 
 
-        /*
-         * ============================================================
-         * PROD - PROMOTE LATEST DEV IMAGE
-         * ============================================================
-         */
-
-        stage('PROD - Promote Image') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'prod'
-                }
-            }
-
+        stage('Deploy Backend - DEV') {
             steps {
-
                 script {
-
-                    def sourceTag = sh(
-                        script: """
-                            aws ecr describe-images \
-                                --repository-name ${env.BACKEND_REPOSITORY} \
-                                --region ${env.AWS_REGION} \
-                                --filter tagStatus=TAGGED \
-                                --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags[?starts_with(@, \\`DEV-\\`)] | [0]' \
-                                --output text
-                        """,
-                        returnStdout: true
-                    ).trim()
-
-                    if (!sourceTag ||
-                        sourceTag == 'None' ||
-                        sourceTag == 'null') {
-
-                        error("No DEV image found in ECR.")
-                    }
-
-                    def sourceImage =
-                        "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${sourceTag}"
-
-                    def targetTag =
-                        "PROD-${sourceTag.replaceFirst('^DEV-', '')}"
-
-                    def targetImage =
-                        "${env.ECR_REGISTRY}/${env.BACKEND_REPOSITORY}:${targetTag}"
-
-                    echo "SOURCE IMAGE = ${sourceImage}"
-                    echo "TARGET IMAGE = ${targetImage}"
-
-                    sh """
-                        set -e
-
-                        aws ecr get-login-password \
-                            --region ${env.AWS_REGION} | \
-                        docker login \
-                            --username AWS \
-                            --password-stdin ${env.ECR_REGISTRY}
-
-                        docker pull ${sourceImage}
-
-                        docker tag \
-                            ${sourceImage} \
-                            ${targetImage}
-
-                        docker push ${targetImage}
-                    """
-
-                    env.IMAGE_URI = targetImage
+                    deployBackend(
+                        'dev',
+                        env.DEV_REPO,
+                        env.DEV_IMAGE_TAG
+                    )
                 }
             }
         }
 
 
-        /*
-         * ============================================================
-         * CREATE TASK DEFINITION
-         * ============================================================
-         */
+        // stage('QA - Promote Image') {
+        //     steps {
+        //         script {
+        //             promoteImage(
+        //                 env.DEV_REPO,
+        //                 env.QA_REPO,
+        //                 env.DEV_IMAGE_TAG,
+        //                 'QA'
+        //             )
+        //             env.QA_IMAGE_TAG ="QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
 
-        stage('Create Task Definition') {
+        //             env.QA_IMAGE_URI ="${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
+        //         }
+        //     }
+        // }
 
-            steps {
 
-                script {
+        // stage('Deploy Backend - QA') {
+        //     steps {
+        //         script {
+        //             deployBackend(
+        //                 'qa',
+        //                 env.QA_REPO,
+        //                 env.QA_IMAGE_TAG
+        //             )
+        //         }
+        //     }
+        // }
 
-                    if (!env.IMAGE_URI?.trim()) {
 
-                        error("IMAGE_URI is empty.")
-                    }
+        // stage('UAT - Promote Image') {
+        //     steps {
+        //         script {
+        //             promoteImage(
+        //                 env.DEV_REPO,
+        //                 env.UAT_REPO,
+        //                 env.DEV_IMAGE_TAG,
+        //                 'UAT'
+        //             )
+        //             env.UAT_IMAGE_TAG ="UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+        //             env.UAT_IMAGE_URI ="${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
+        //         }
+        //     }
+        // }
 
-                    echo "IMAGE URI = ${env.IMAGE_URI}"
-                    echo "ENVIRONMENT = ${params.ENVIRONMENT}"
 
-                    sh """
-                        set -e
+        // stage('Deploy Backend - UAT') {
+        //     steps {
+        //         script {
+        //             deployBackend(
+        //                 'uat',
+        //                 env.UAT_REPO,
+        //                 env.UAT_IMAGE_TAG
+        //             )
+        //         }
+        //     }
+        // }
 
-                        ENVIRONMENT="${params.ENVIRONMENT}" \
-                        IMAGE_URI="${env.IMAGE_URI}" \
-                        TASK_DEFINITION_TEMPLATE="${env.TASK_DEFINITION_TEMPLATE}" \
-                        python3 - <<'PY'
+
+        // stage('Production Approval') {
+        //     steps {
+        //         input(
+        //             message:
+        //                 'DEV, QA and UAT Backend deployment completed. Deploy Employee Management Backend to PROD?',
+
+        //             ok:
+        //                 'Deploy to PROD'
+        //         )
+        //     }
+        // }
+
+
+        // stage('PROD - Promote Image') {
+        //     steps {
+        //         script {
+        //             promoteImage(
+        //                 env.DEV_REPO,
+        //                 env.PROD_REPO,
+        //                 env.DEV_IMAGE_TAG,
+        //                 'PROD'
+        //             )
+
+
+        //             env.PROD_IMAGE_TAG ="PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+        //             env.PROD_IMAGE_URI ="${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
+        //         }
+        //     }
+        // }
+
+
+        // stage('Deploy Backend - PROD') {
+        //     steps {
+        //         script {
+        //             deployBackend(
+        //                 'prod',
+        //                 env.PROD_REPO,
+        //                 env.PROD_IMAGE_TAG
+        //             )
+        //         }
+        //     }
+        // }
+    }
+
+
+    post {
+        always {
+            echo 'Cleaning Jenkins workspace...'
+            cleanWs()
+        }
+
+
+        success {
+
+            echo '''
+============================================================
+EMPLOYEE MANAGEMENT BACKEND ECS CI/CD completed successfully.
+
+DEV  → QA → UAT → PROD
+============================================================
+'''
+        }
+
+
+        failure {
+
+            echo '''
+============================================================
+EMPLOYEE MANAGEMENT BACKEND ECS CI/CD FAILED.
+
+Check the Jenkins console output.
+============================================================
+'''
+        }
+    }
+}
+
+
+def promoteImage(
+    String sourceRepo,
+    String targetRepo,
+    String sourceTag,
+    String targetEnvironment
+) {
+
+    def sourceImage ="${env.ECR_REGISTRY}/${sourceRepo}:${sourceTag}"
+    def targetTag ="${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
+    def targetImage ="${env.ECR_REGISTRY}/${targetRepo}:${targetTag}"
+
+
+    echo "============================================================"
+    echo "PROMOTING EMPLOYEE MANAGEMENT BACKEND IMAGE"
+    echo "============================================================"
+    echo "SOURCE REPOSITORY : ${sourceRepo}"
+    echo "SOURCE IMAGE      : ${sourceImage}"
+    echo "TARGET REPOSITORY : ${targetRepo}"
+    echo "TARGET IMAGE      : ${targetImage}"
+    echo "============================================================"
+
+
+    withCredentials([
+        [
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: "${env.AWS_CRED}"
+        ]
+    ]) {
+
+        sh """
+            set -e
+            echo "AWS Identity:"
+            aws sts get-caller-identity
+
+
+            echo "Logging in to ECR..."
+            aws ecr get-login-password \
+                --region ${env.AWS_REGION} \
+                | docker login \
+                    --username AWS \
+                    --password-stdin ${env.ECR_REGISTRY}
+
+
+            echo "Pulling DEV image..."
+            docker pull ${sourceImage}
+
+
+            echo "Tagging image..."
+            docker tag \
+                ${sourceImage} \
+                ${targetImage}
+
+
+            echo "Pushing promoted image..."
+            docker push ${targetImage}
+
+            echo "============================================================"
+            echo "PROMOTION COMPLETED"
+            echo "TARGET IMAGE: ${targetImage}"
+            echo "============================================================"
+        """
+    }
+}
+
+
+def deployBackend(
+    String environment,
+    String repository,
+    String imageTag
+) {
+
+    def imageUri ="${env.ECR_REGISTRY}/${repository}:${imageTag}"
+
+    def taskDefinitionFile ="new-backend-task-definition-${environment}.json"
+
+
+    echo "============================================================"
+    echo "DEPLOYING EMPLOYEE MANAGEMENT BACKEND"
+    echo "============================================================"
+    echo "Environment : ${environment}"
+    echo "Repository  : ${repository}"
+    echo "Image Tag   : ${imageTag}"
+    echo "Image URI   : ${imageUri}"
+    echo "============================================================"
+
+
+    withCredentials([
+        [
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: "${env.AWS_CRED}"
+        ]
+    ]) {
+
+        sh """
+            set -e
+
+            echo "AWS Identity:"
+            aws sts get-caller-identity
+
+            echo "Creating ECS task definition for ${environment}..."
+
+
+            ENVIRONMENT="${environment}" \
+            IMAGE_URI="${imageUri}" \
+            TASK_DEFINITION_TEMPLATE="${env.TASK_DEFINITION_TEMPLATE}" \
+            OUTPUT_FILE="${taskDefinitionFile}" \
+            python3 - <<'PYTHON'
 
 import json
 import os
 
-input_file = os.environ["TASK_DEFINITION_TEMPLATE"]
-output_file = "new-backend-task-definition.json"
 
+input_file = os.environ["TASK_DEFINITION_TEMPLATE"]
+output_file = os.environ["OUTPUT_FILE"]
 environment = os.environ["ENVIRONMENT"]
 image_uri = os.environ["IMAGE_URI"]
 
+
 with open(input_file, "r") as f:
+
     task_definition = json.load(f)
 
+
 task_definition["family"] = \
-    f"employee-managemet-{environment}-backend"
+    f"employee-mgm-{environment}-backend"
+
+
+container_found = False
+
 
 for container in task_definition["containerDefinitions"]:
 
     if container["name"] == "backend":
-
         container["image"] = image_uri
+        container_found = True
         break
 
-else:
+
+if not container_found:
 
     raise Exception(
         "Container named 'backend' was not found."
     )
+
+
+remove_fields = [
+    "taskDefinitionArn",
+    "revision",
+    "status",
+    "requiresAttributes",
+    "compatibilities",
+    "registeredAt",
+    "registeredBy"
+]
+
+
+for field in remove_fields:
+
+    task_definition.pop(
+        field,
+        None
+    )
+
 
 with open(output_file, "w") as f:
 
@@ -376,108 +433,70 @@ with open(output_file, "w") as f:
         indent=2
     )
 
-PY
 
-                        echo "Generated task definition:"
-                        cat new-backend-task-definition.json
-                    """
-                }
-            }
-        }
+print("Task definition created:")
+print(output_file)
 
+print("Backend image:")
+print(image_uri)
 
-        /*
-         * ============================================================
-         * REGISTER + UPDATE ECS SERVICE
-         *
-         * Revision is stored in a LOCAL Groovy variable.
-         * ============================================================
-         */
-
-        stage('Register and Update ECS Service') {
-
-            steps {
-
-                script {
-
-                    def revision = sh(
-                        script: """
-                            set -e
-
-                            aws ecs register-task-definition \
-                                --cli-input-json file://new-backend-task-definition.json \
-                                --region ${env.AWS_REGION} \
-                                --query 'taskDefinition.revision' \
-                                --output text
-                        """,
-                        returnStdout: true
-                    ).trim()
-
-                    echo "AWS REGISTERED REVISION = '${revision}'"
-
-                    if (!revision ||
-                        revision == 'null' ||
-                        revision == 'None') {
-
-                        error(
-                            "ECS returned invalid revision: '${revision}'"
-                        )
-                    }
-
-                    def environment =
-                        params.ENVIRONMENT
-
-                    def cluster =
-                        "employee-managemet-${environment}-cluster"
-
-                    def service =
-                        "employee-managemet-${environment}-backend-service"
-
-                    def taskFamily =
-                        "employee-managemet-${environment}-backend"
-
-                    echo "ENVIRONMENT = ${environment}"
-                    echo "CLUSTER = ${cluster}"
-                    echo "SERVICE = ${service}"
-                    echo "TASK FAMILY = ${taskFamily}"
-                    echo "TASK REVISION = ${revision}"
-
-                    sh """
-                        set -e
-
-                        aws ecs update-service \
-                            --cluster ${cluster} \
-                            --service ${service} \
-                            --task-definition ${taskFamily}:${revision} \
-                            --force-new-deployment \
-                            --region ${env.AWS_REGION}
-
-                        aws ecs wait services-stable \
-                            --cluster ${cluster} \
-                            --services ${service} \
-                            --region ${env.AWS_REGION}
-                    """
-
-                    echo "ECS ${environment} backend deployment completed successfully."
-                }
-            }
-        }
-    }
+PYTHON
 
 
-    /*
-     * ================================================================
-     * POST
-     * ================================================================
-     */
+            echo "Generated task definition:"
 
-    post {
+            cat ${taskDefinitionFile}
 
-        always {
 
-            echo "Cleaning Jenkins workspace..."
+            echo "Registering ECS task definition..."
 
-            cleanWs()
-        }
+
+            REVISION=\$(aws ecs register-task-definition \
+                --cli-input-json file://${taskDefinitionFile} \
+                --region ${env.AWS_REGION} \
+                --query 'taskDefinition.revision' \
+                --output text)
+
+
+            echo "AWS REGISTERED REVISION = \$REVISION"
+
+
+            if [ -z "\$REVISION" ] || \
+               [ "\$REVISION" = "null" ] || \
+               [ "\$REVISION" = "None" ]; then
+
+                echo "ERROR: ECS returned invalid revision."
+
+                exit 1
+
+            fi
+
+
+            echo "Updating ECS Backend service..."
+
+
+            aws ecs update-service \
+                --cluster employee-mgm-${environment}-cluster \
+                --service employee-mgm-${environment}-backend-service \
+                --task-definition employee-mgm-${environment}-backend:\$REVISION \
+                --force-new-deployment \
+                --region ${env.AWS_REGION}
+
+
+            echo "Waiting for ECS Backend service to become stable..."
+
+
+            aws ecs wait services-stable \
+                --cluster employee-mgm-${environment}-cluster \
+                --services employee-mgm-${environment}-backend-service \
+                --region ${env.AWS_REGION}
+
+
+            echo "============================================================"
+            echo "EMPLOYEE MANAGEMENT BACKEND ${environment} deployment completed."
+            echo "Image: ${imageUri}"
+            echo "============================================================"
+        """
     }
 }
+
