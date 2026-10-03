@@ -37,7 +37,7 @@
     }
   ],
   "family": "employee-mgm-${ENV}-db",
-  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-managemet-ecs-execution-role",
+  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-dev-ecs-execution-role",
   "taskRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-dev-ecs-task-role",
   "networkMode": "awsvpc",
   "requiresCompatibilities": [
