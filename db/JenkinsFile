@@ -415,7 +415,7 @@ with open(input_file, "r") as f:
 
 
 task_definition["family"] = \
-    f"employee-managemet-{environment}-db"
+    f"employee-mgm-{environment}-db"
 
 
 container_found = False
