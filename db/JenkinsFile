@@ -127,29 +127,29 @@ pipeline {
         }
 
 
-        // stage('QA - Promote Image') {
+        stage('QA - Promote Image') {
 
-        //     steps {
+            steps {
 
-        //         script {
+                script {
 
-        //             promoteImage(
-        //                 env.DEV_REPO,
-        //                 env.QA_REPO,
-        //                 env.DEV_IMAGE_TAG,
-        //                 'QA'
-        //             )
-
-
-        //             env.QA_IMAGE_TAG =
-        //                 "QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                    promoteImage(
+                        env.DEV_REPO,
+                        env.QA_REPO,
+                        env.DEV_IMAGE_TAG,
+                        'QA'
+                    )
 
 
-        //             env.QA_IMAGE_URI =
-        //                 "${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
-        //         }
-        //     }
-        // }
+                    env.QA_IMAGE_TAG =
+                        "QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+
+
+                    env.QA_IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
+                }
+            }
+        }
 
 
         // stage('Deploy DB - QA') {
@@ -168,28 +168,28 @@ pipeline {
         // }
 
 
-        // stage('UAT - Promote Image') {
+        stage('UAT - Promote Image') {
 
-        //     steps {
+            steps {
 
-        //         script {
+                script {
 
-        //             promoteImage(
-        //                 env.DEV_REPO,
-        //                 env.UAT_REPO,
-        //                 env.DEV_IMAGE_TAG,
-        //                 'UAT'
-        //             )
-
-
-        //             env.UAT_IMAGE_TAG ="UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                    promoteImage(
+                        env.DEV_REPO,
+                        env.UAT_REPO,
+                        env.DEV_IMAGE_TAG,
+                        'UAT'
+                    )
 
 
-        //             env.UAT_IMAGE_URI =
-        //                 "${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
-        //         }
-        //     }
-        // }
+                    env.UAT_IMAGE_TAG ="UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+
+
+                    env.UAT_IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
+                }
+            }
+        }
 
 
         // stage('Deploy DB - UAT') {
@@ -223,29 +223,29 @@ pipeline {
         // }
 
 
-        // stage('PROD - Promote Image') {
+        stage('PROD - Promote Image') {
 
-        //     steps {
+            steps {
 
-        //         script {
+                script {
 
-        //             promoteImage(
-        //                 env.DEV_REPO,
-        //                 env.PROD_REPO,
-        //                 env.DEV_IMAGE_TAG,
-        //                 'PROD'
-        //             )
-
-
-        //             env.PROD_IMAGE_TAG =
-        //                 "PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                    promoteImage(
+                        env.DEV_REPO,
+                        env.PROD_REPO,
+                        env.DEV_IMAGE_TAG,
+                        'PROD'
+                    )
 
 
-        //             env.PROD_IMAGE_URI =
-        //                 "${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
-        //         }
-        //     }
-        // }
+                    env.PROD_IMAGE_TAG =
+                        "PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+
+
+                    env.PROD_IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
+                }
+            }
+        }
 
 
         // stage('Deploy DB - PROD') {
@@ -529,4 +529,3 @@ PYTHON
         """
     }
 }
-
