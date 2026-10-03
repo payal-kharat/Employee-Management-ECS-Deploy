@@ -414,7 +414,8 @@ with open(input_file, "r") as f:
     task_definition = json.load(f)
 
 
-task_definition["family"] = \ f"employee-managemet-{environment}-db"
+task_definition["family"] = \ 
+  f"employee-managemet-{environment}-db"
 
 
 container_found = False
