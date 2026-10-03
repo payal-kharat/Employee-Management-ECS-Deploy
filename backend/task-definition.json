@@ -16,7 +16,7 @@
       "environment": [
         {
           "name": "DB_HOST",
-          "value": "mysql"
+          "value": "emp-db.emp-dev.local"
         },
         {
           "name": "DB_PORT",
