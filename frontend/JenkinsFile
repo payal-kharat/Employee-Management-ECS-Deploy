@@ -28,16 +28,14 @@ pipeline {
         ECR_REGISTRY =
             "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-        DEV_REPO  = 'employee-mgm-dev-frontend'
-        // QA_REPO   = 'employee-mgm-qa-frontend'
+        // DEV_REPO  = 'employee-mgm-dev-frontend'
+         QA_REPO   = 'employee-mgm-qa-frontend'
         // UAT_REPO  = 'employee-mgm-uat-frontend'
         // PROD_REPO = 'employee-mgm-prod-frontend'
 
-        BUILD_CONTEXT =
-            './frontend'
+        BUILD_CONTEXT ='./frontend'
 
-        TASK_DEFINITION_TEMPLATE =
-            './frontend/task-definition.json'
+        TASK_DEFINITION_TEMPLATE ='./frontend/task-definition.json'
     }
 
 
@@ -129,117 +127,53 @@ pipeline {
         }
 
 
-        stage('DEV - Push Image') {
-
-            when {
-
-                expression {
-
-                    params.ENVIRONMENT == 'dev'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    if (!env.DEV_IMAGE_URI?.trim()) {
-
-                        error(
-                            "DEV_IMAGE_URI is empty. " +
-                            "DEV image was not built successfully."
-                        )
-                    }
-
-
-                    echo "======================================"
-                    echo "PUSHING EMPLOYEE MANAGEMENT FRONTEND IMAGE"
-                    echo "DEV REPOSITORY = ${env.DEV_REPO}"
-                    echo "IMAGE URI       = ${env.DEV_IMAGE_URI}"
-                    echo "======================================"
-
-
-                    docker.withRegistry(
-                        "https://${env.ECR_REGISTRY}",
-                        "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
-                    ) {
-
-                        docker.image(
-                            env.DEV_IMAGE_URI
-                        ).push()
-                    }
-
-
-                    echo "Employee Management Frontend DEV image pushed successfully."
-                }
-            }
-        }
-
-
-        stage('Deploy Frontend - DEV') {
-
-            when {
-
-                expression {
-
-                    params.ENVIRONMENT == 'dev'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    deployFrontend(
-                        'dev',
-                        env.DEV_REPO,
-                        env.DEV_IMAGE_TAG
-                    )
-                }
-            }
-        }
-
-
-        // stage('QA - Promote Image') {
-
+        // stage('DEV - Push Image') {
         //     when {
-
         //         expression {
 
-        //             params.ENVIRONMENT == 'qa'
+        //             params.ENVIRONMENT == 'dev'
         //         }
         //     }
 
         //     steps {
-
         //         script {
+        //             if (!env.DEV_IMAGE_URI?.trim()) {
+        //                 error(
+        //                     "DEV_IMAGE_URI is empty. " +
+        //                     "DEV image was not built successfully."
+        //                 )
+        //             }
 
-        //             env.QA_IMAGE_TAG =
-        //                 "QA-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+
+        //             echo "======================================"
+        //             echo "PUSHING EMPLOYEE MANAGEMENT FRONTEND IMAGE"
+        //             echo "DEV REPOSITORY = ${env.DEV_REPO}"
+        //             echo "IMAGE URI       = ${env.DEV_IMAGE_URI}"
+        //             echo "======================================"
 
 
-        //             env.QA_IMAGE_URI =
-        //                 "${env.ECR_REGISTRY}/employee-mgm-qa-frontend:${env.QA_IMAGE_TAG}"
+        //             docker.withRegistry(
+        //                 "https://${env.ECR_REGISTRY}",
+        //                 "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
+        //             ) {
 
-
-        //             promoteImage(
-        //                 env.DEV_REPO,
-        //                 'employee-mgm-qa-frontend',
-        //                 params.DEV_IMAGE_TAG,
-        //                 'QA'
-        //             )
+        //                 docker.image(
+        //                     env.DEV_IMAGE_URI
+        //                 ).push()
+        //             }
+        //             echo "Employee Management Frontend DEV image pushed successfully."
         //         }
         //     }
         // }
 
 
-        // stage('Deploy Frontend - QA') {
+        // stage('Deploy Frontend - DEV') {
 
         //     when {
 
         //         expression {
 
-        //             params.ENVIRONMENT == 'qa'
+        //             params.ENVIRONMENT == 'dev'
         //         }
         //     }
 
@@ -248,13 +182,70 @@ pipeline {
         //         script {
 
         //             deployFrontend(
-        //                 'qa',
-        //                 'employee-mgm-qa-frontend',
-        //                 env.QA_IMAGE_TAG
+        //                 'dev',
+        //                 env.DEV_REPO,
+        //                 env.DEV_IMAGE_TAG
         //             )
         //         }
         //     }
         // }
+
+
+        stage('QA - Promote Image') {
+
+            when {
+
+                expression {
+
+                    params.ENVIRONMENT == 'qa'
+                }
+            }
+
+            steps {
+
+                script {
+
+                    env.QA_IMAGE_TAG =
+                        "QA-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+
+
+                    env.QA_IMAGE_URI =
+                        "${env.ECR_REGISTRY}/employee-mgm-qa-frontend:${env.QA_IMAGE_TAG}"
+
+
+                    promoteImage(
+                        env.DEV_REPO,
+                        'employee-mgm-qa-frontend',
+                        params.DEV_IMAGE_TAG,
+                        'QA'
+                    )
+                }
+            }
+        }
+
+
+        stage('Deploy Frontend - QA') {
+
+            when {
+
+                expression {
+
+                    params.ENVIRONMENT == 'qa'
+                }
+            }
+
+            steps {
+
+                script {
+
+                    deployFrontend(
+                        'qa',
+                        'employee-mgm-qa-frontend',
+                        env.QA_IMAGE_TAG
+                    )
+                }
+            }
+        }
 
 
         // stage('UAT - Promote Image') {
