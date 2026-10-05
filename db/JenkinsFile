@@ -3,6 +3,21 @@ pipeline {
 
     agent any
 
+    parameters {
+
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'qa', 'uat', 'prod'],
+            description: 'Select the environment to deploy'
+        )
+
+        string(
+            name: 'DEV_IMAGE_TAG',
+            defaultValue: '',
+            description: 'For QA/UAT/PROD enter the existing DEV image tag, e.g. DEV-a1b2c3d-25'
+        )
+    }
+
     environment {
 
         AWS_REGION     = 'us-east-1'
@@ -10,20 +25,24 @@ pipeline {
 
         AWS_CRED = 'AWS'
 
-        ECR_REGISTRY ="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REGISTRY =
+            "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
         DEV_REPO  = 'employee-mgm-dev-db'
-        // QA_REPO   = 'employee-managemet-qa-db'
-        // UAT_REPO  = 'employee-managemet-uat-db'
-        // PROD_REPO = 'employee-managemet-prod-db'
+        QA_REPO   = 'employee-mgm-qa-db'
+        UAT_REPO  = 'employee-mgm-uat-db'
+        PROD_REPO = 'employee-mgm-prod-db'
 
-        BUILD_CONTEXT ='./db'
+        BUILD_CONTEXT =
+            './db'
 
-        TASK_DEFINITION_TEMPLATE ='./db/task-definition.json'
+        TASK_DEFINITION_TEMPLATE =
+            './db/task-definition.json'
     }
 
 
     stages {
+
 
         stage('Checkout') {
 
@@ -40,7 +59,9 @@ pipeline {
                         ).trim()
 
                     echo "======================================"
-                    echo "COMMIT ID = ${env.COMMIT_ID}"
+                    echo "COMMIT ID   = ${env.COMMIT_ID}"
+                    echo "ENVIRONMENT = ${params.ENVIRONMENT}"
+                    echo "DEV TAG     = ${params.DEV_IMAGE_TAG}"
                     echo "======================================"
                 }
             }
@@ -48,12 +69,29 @@ pipeline {
 
 
         stage('DEV - Build Image') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'dev'
+                }
+            }
+
             steps {
+
                 script {
-                    def imageTag ="DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
-                    env.DEV_IMAGE_TAG =imageTag
-                    def imageUri ="${env.ECR_REGISTRY}/${env.DEV_REPO}:${imageTag}"
-                    env.DEV_IMAGE_URI =imageUri
+
+                    def imageTag =
+                        "DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
+
+                    env.DEV_IMAGE_TAG =
+                        imageTag
+
+                    def imageUri =
+                        "${env.ECR_REGISTRY}/${env.DEV_REPO}:${imageTag}"
+
+                    env.DEV_IMAGE_URI =
+                        imageUri
+
 
                     echo "======================================"
                     echo "BUILD ENVIRONMENT = DEV"
@@ -65,6 +103,8 @@ pipeline {
 
 
                     echo "Building Employee Management DB Docker image..."
+
+
                     docker.withRegistry(
                         "https://${env.ECR_REGISTRY}",
                         "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
@@ -75,6 +115,8 @@ pipeline {
                             env.BUILD_CONTEXT
                         )
                     }
+
+
                     echo "Employee Management DB Docker image built successfully."
                 }
             }
@@ -82,19 +124,28 @@ pipeline {
 
 
         stage('DEV - Push Image') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'dev'
+                }
+            }
+
             steps {
+
                 script {
-                    if (!env.DEV_IMAGE_URI?.trim()) {
-                        error(
-                            "DEV_IMAGE_URI is empty. " +
-                            "DEV image was not built successfully."
-                        )
-                    }
+
+                    def imageUri =
+                        "${env.ECR_REGISTRY}/${env.DEV_REPO}:${env.DEV_IMAGE_TAG}"
+
+                    env.DEV_IMAGE_URI =
+                        imageUri
 
 
                     echo "======================================"
                     echo "PUSHING EMPLOYEE MANAGEMENT DB IMAGE"
                     echo "DEV REPOSITORY = ${env.DEV_REPO}"
+                    echo "IMAGE TAG       = ${env.DEV_IMAGE_TAG}"
                     echo "IMAGE URI       = ${env.DEV_IMAGE_URI}"
                     echo "======================================"
 
@@ -108,6 +159,8 @@ pipeline {
                             env.DEV_IMAGE_URI
                         ).push()
                     }
+
+
                     echo "Employee Management DB DEV image pushed successfully."
                 }
             }
@@ -115,8 +168,17 @@ pipeline {
 
 
         stage('Deploy DB - DEV') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'dev'
+                }
+            }
+
             steps {
+
                 script {
+
                     deployDB(
                         'dev',
                         env.DEV_REPO,
@@ -127,168 +189,221 @@ pipeline {
         }
 
 
-        // stage('QA - Promote Image') {
+        stage('QA - Promote Image') {
 
-        //     steps {
+            when {
+                expression {
+                    params.ENVIRONMENT == 'qa'
+                }
+            }
 
-        //         script {
+            steps {
 
-        //             promoteImage(
-        //                 env.DEV_REPO,
-        //                 env.QA_REPO,
-        //                 env.DEV_IMAGE_TAG,
-        //                 'QA'
-        //             )
+                script {
 
+                    env.QA_IMAGE_TAG =
+                        "QA-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
 
-        //             env.QA_IMAGE_TAG =
-        //                 "QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-
-
-        //             env.QA_IMAGE_URI =
-        //                 "${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
-        //         }
-        //     }
-        // }
+                    env.QA_IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
 
 
-        // stage('Deploy DB - QA') {
-
-        //     steps {
-
-        //         script {
-
-        //             deployDB(
-        //                 'qa',
-        //                 env.QA_REPO,
-        //                 env.QA_IMAGE_TAG
-        //             )
-        //         }
-        //     }
-        // }
+                    promoteImage(
+                        env.DEV_REPO,
+                        env.QA_REPO,
+                        params.DEV_IMAGE_TAG,
+                        'QA'
+                    )
+                }
+            }
+        }
 
 
-        // stage('UAT - Promote Image') {
+        stage('Deploy DB - QA') {
 
-        //     steps {
+            when {
+                expression {
+                    params.ENVIRONMENT == 'qa'
+                }
+            }
 
-        //         script {
+            steps {
 
-        //             promoteImage(
-        //                 env.DEV_REPO,
-        //                 env.UAT_REPO,
-        //                 env.DEV_IMAGE_TAG,
-        //                 'UAT'
-        //             )
+                script {
 
-
-        //             env.UAT_IMAGE_TAG ="UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-
-
-        //             env.UAT_IMAGE_URI =
-        //                 "${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
-        //         }
-        //     }
-        // }
+                    deployDB(
+                        'qa',
+                        env.QA_REPO,
+                        env.QA_IMAGE_TAG
+                    )
+                }
+            }
+        }
 
 
-        // stage('Deploy DB - UAT') {
+        stage('UAT - Promote Image') {
 
-        //     steps {
+            when {
+                expression {
+                    params.ENVIRONMENT == 'uat'
+                }
+            }
 
-        //         script {
+            steps {
 
-        //             deployDB(
-        //                 'uat',
-        //                 env.UAT_REPO,
-        //                 env.UAT_IMAGE_TAG
-        //             )
-        //         }
-        //     }
-        // }
+                script {
 
+                    env.UAT_IMAGE_TAG =
+                        "UAT-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
 
-        // stage('Production Approval') {
-
-        //     steps {
-
-        //         input(
-        //             message:
-        //                 'DEV, QA and UAT DB deployment completed. Deploy Employee Management DB to PROD?',
-
-        //             ok:
-        //                 'Deploy to PROD'
-        //         )
-        //     }
-        // }
+                    env.UAT_IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
 
 
-        // stage('PROD - Promote Image') {
-
-        //     steps {
-
-        //         script {
-
-        //             promoteImage(
-        //                 env.DEV_REPO,
-        //                 env.PROD_REPO,
-        //                 env.DEV_IMAGE_TAG,
-        //                 'PROD'
-        //             )
+                    promoteImage(
+                        env.DEV_REPO,
+                        env.UAT_REPO,
+                        params.DEV_IMAGE_TAG,
+                        'UAT'
+                    )
+                }
+            }
+        }
 
 
-        //             env.PROD_IMAGE_TAG =
-        //                 "PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+        stage('Deploy DB - UAT') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'uat'
+                }
+            }
+
+            steps {
+
+                script {
+
+                    deployDB(
+                        'uat',
+                        env.UAT_REPO,
+                        env.UAT_IMAGE_TAG
+                    )
+                }
+            }
+        }
 
 
-        //             env.PROD_IMAGE_URI =
-        //                 "${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
-        //         }
-        //     }
-        // }
+        stage('Production Approval') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'prod'
+                }
+            }
+
+            steps {
+
+                input(
+                    message:
+                        "DEV image ${params.DEV_IMAGE_TAG} is ready for PROD. " +
+                        "Deploy Employee Management DB to PROD?",
+
+                    ok:
+                        'Deploy to PROD'
+                )
+            }
+        }
 
 
-        // stage('Deploy DB - PROD') {
+        stage('PROD - Promote Image') {
 
-        //     steps {
+            when {
+                expression {
+                    params.ENVIRONMENT == 'prod'
+                }
+            }
 
-        //         script {
+            steps {
 
-        //             deployDB(
-        //                 'prod',
-        //                 env.PROD_REPO,
-        //                 env.PROD_IMAGE_TAG
-        //             )
-        //         }
-        //     }
-        // }
+                script {
+
+                    env.PROD_IMAGE_TAG =
+                        "PROD-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+
+                    env.PROD_IMAGE_URI =
+                        "${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
+
+
+                    promoteImage(
+                        env.DEV_REPO,
+                        env.PROD_REPO,
+                        params.DEV_IMAGE_TAG,
+                        'PROD'
+                    )
+                }
+            }
+        }
+
+
+        stage('Deploy DB - PROD') {
+
+            when {
+                expression {
+                    params.ENVIRONMENT == 'prod'
+                }
+            }
+
+            steps {
+
+                script {
+
+                    deployDB(
+                        'prod',
+                        env.PROD_REPO,
+                        env.PROD_IMAGE_TAG
+                    )
+                }
+            }
+        }
     }
 
 
     post {
+
         always {
+
             echo 'Cleaning Jenkins workspace...'
+
             cleanWs()
         }
-        success {
-            echo '''
-============================================================
-EMPLOYEE MANAGEMENT DB ECS CI/CD completed successfully.
 
-DEV  → QA → UAT → PROD
+
+        success {
+
+            echo """
 ============================================================
-'''
+EMPLOYEE MANAGEMENT DB ECS CI/CD COMPLETED SUCCESSFULLY.
+
+Environment : ${params.ENVIRONMENT}
+DEV TAG     : ${params.ENVIRONMENT == 'dev' ? env.DEV_IMAGE_TAG : params.DEV_IMAGE_TAG}
+
+DEV  -> QA -> UAT -> PROD
+============================================================
+"""
         }
 
 
         failure {
-            echo '''
+
+            echo """
 ============================================================
 EMPLOYEE MANAGEMENT DB ECS CI/CD FAILED.
 
+Environment : ${params.ENVIRONMENT}
+
 Check the Jenkins console output.
 ============================================================
-'''
+"""
         }
     }
 }
@@ -301,9 +416,16 @@ def promoteImage(
     String targetEnvironment
 ) {
 
-    def sourceImage ="${env.ECR_REGISTRY}/${sourceRepo}:${sourceTag}"
-    def targetTag ="${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
-    def targetImage ="${env.ECR_REGISTRY}/${targetRepo}:${targetTag}"
+    def sourceImage =
+        "${env.ECR_REGISTRY}/${sourceRepo}:${sourceTag}"
+
+
+    def targetTag =
+        "${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
+
+
+    def targetImage =
+        "${env.ECR_REGISTRY}/${targetRepo}:${targetTag}"
 
 
     echo "============================================================"
@@ -317,18 +439,26 @@ def promoteImage(
 
 
     withCredentials([
+
         [
             $class: 'AmazonWebServicesCredentialsBinding',
             credentialsId: "${env.AWS_CRED}"
         ]
+
     ]) {
 
         sh """
+
             set -e
+
+
             echo "AWS Identity:"
+
             aws sts get-caller-identity
 
+
             echo "Logging in to ECR..."
+
 
             aws ecr get-login-password \
                 --region ${env.AWS_REGION} \
@@ -338,19 +468,28 @@ def promoteImage(
 
 
             echo "Pulling DEV image..."
+
+
             docker pull ${sourceImage}
 
 
             echo "Tagging image..."
+
+
             docker tag \
                 ${sourceImage} \
                 ${targetImage}
 
 
             echo "Pushing promoted image..."
+
+
             docker push ${targetImage}
+
+
             echo "============================================================"
             echo "PROMOTION COMPLETED"
+            echo "SOURCE IMAGE: ${sourceImage}"
             echo "TARGET IMAGE: ${targetImage}"
             echo "============================================================"
         """
@@ -364,9 +503,12 @@ def deployDB(
     String imageTag
 ) {
 
-    def imageUri ="${env.ECR_REGISTRY}/${repository}:${imageTag}"
+    def imageUri =
+        "${env.ECR_REGISTRY}/${repository}:${imageTag}"
 
-    def taskDefinitionFile ="new-db-task-definition-${environment}.json"
+
+    def taskDefinitionFile =
+        "new-db-task-definition-${environment}.json"
 
 
     echo "============================================================"
@@ -380,18 +522,26 @@ def deployDB(
 
 
     withCredentials([
+
         [
             $class: 'AmazonWebServicesCredentialsBinding',
             credentialsId: "${env.AWS_CRED}"
         ]
+
     ]) {
 
         sh """
+
             set -e
 
+
             echo "AWS Identity:"
+
             aws sts get-caller-identity
+
+
             echo "Creating ECS task definition for ${environment}..."
+
 
             ENVIRONMENT="${environment}" \
             IMAGE_URI="${imageUri}" \
@@ -420,10 +570,13 @@ task_definition["family"] = \
 
 container_found = False
 
+
 for container in task_definition["containerDefinitions"]:
 
     if container["name"] == "db":
+
         container["image"] = image_uri
+
         container_found = True
 
         break
@@ -437,6 +590,7 @@ if not container_found:
 
 
 remove_fields = [
+
     "taskDefinitionArn",
     "revision",
     "status",
@@ -444,6 +598,7 @@ remove_fields = [
     "compatibilities",
     "registeredAt",
     "registeredBy"
+
 ]
 
 
@@ -481,19 +636,19 @@ PYTHON
             echo "Registering ECS task definition..."
 
 
-            REVISION=\$(aws ecs register-task-definition \
+            REVISION=\\$(aws ecs register-task-definition \
                 --cli-input-json file://${taskDefinitionFile} \
                 --region ${env.AWS_REGION} \
                 --query 'taskDefinition.revision' \
                 --output text)
 
 
-            echo "AWS REGISTERED REVISION = \$REVISION"
+            echo "AWS REGISTERED REVISION = \\$REVISION"
 
 
-            if [ -z "\$REVISION" ] || \
-               [ "\$REVISION" = "null" ] || \
-               [ "\$REVISION" = "None" ]; then
+            if [ -z "\\$REVISION" ] || \
+               [ "\\$REVISION" = "null" ] || \
+               [ "\\$REVISION" = "None" ]; then
 
                 echo "ERROR: ECS returned invalid revision."
 
@@ -508,7 +663,7 @@ PYTHON
             aws ecs update-service \
                 --cluster employee-mgm-${environment}-cluster \
                 --service employee-mgm-${environment}-db-service \
-                --task-definition employee-mgm-${environment}-db:\$REVISION \
+                --task-definition employee-mgm-${environment}-db:\\$REVISION \
                 --force-new-deployment \
                 --region ${env.AWS_REGION}
 
@@ -523,9 +678,10 @@ PYTHON
 
 
             echo "============================================================"
-            echo "EMPLOYEE MANAGEMENT DB ${environment} deployment completed."
-            echo "Image: ${imageUri}"
+            echo "EMPLOYEE MANAGEMENT DB ${environment} DEPLOYMENT COMPLETED."
+            echo "IMAGE: ${imageUri}"
             echo "============================================================"
         """
     }
 }
+
