@@ -200,200 +200,197 @@ pipeline {
         }
 
 
-        stage('QA - Promote Image') {
+        // stage('QA - Promote Image') {
+        //     when {
+        //         expression {
+        //             params.ENVIRONMENT == 'qa'
+        //         }
+        //     }
 
-            when {
+        //     steps {
 
-                expression {
+        //         script {
 
-                    params.ENVIRONMENT == 'qa'
-                }
-            }
+        //             env.QA_IMAGE_TAG =
+        //                 "QA-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
 
-            steps {
 
-                script {
+        //             env.QA_IMAGE_URI =
+        //                 "${env.ECR_REGISTRY}/employee-mgm-qa-backend:${env.QA_IMAGE_TAG}"
 
-                    env.QA_IMAGE_TAG =
-                        "QA-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
 
+        //             promoteImage(
+        //                 env.DEV_REPO,
+        //                 'employee-mgm-qa-backend',
+        //                 params.DEV_IMAGE_TAG,
+        //                 'QA'
+        //             )
+        //         }
+        //     }
+        // }
 
-                    env.QA_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/employee-mgm-qa-backend:${env.QA_IMAGE_TAG}"
 
+        // stage('Deploy Backend - QA') {
 
-                    promoteImage(
-                        env.DEV_REPO,
-                        'employee-mgm-qa-backend',
-                        params.DEV_IMAGE_TAG,
-                        'QA'
-                    )
-                }
-            }
-        }
+        //     when {
 
+        //         expression {
 
-        stage('Deploy Backend - QA') {
+        //             params.ENVIRONMENT == 'qa'
+        //         }
+        //     }
 
-            when {
+        //     steps {
 
-                expression {
+        //         script {
 
-                    params.ENVIRONMENT == 'qa'
-                }
-            }
+        //             deployBackend(
+        //                 'qa',
+        //                 'employee-mgm-qa-backend',
+        //                 env.QA_IMAGE_TAG
+        //             )
+        //         }
+        //     }
+        // }
 
-            steps {
 
-                script {
+        // stage('UAT - Promote Image') {
 
-                    deployBackend(
-                        'qa',
-                        'employee-mgm-qa-backend',
-                        env.QA_IMAGE_TAG
-                    )
-                }
-            }
-        }
+        //     when {
 
+        //         expression {
 
-        stage('UAT - Promote Image') {
+        //             params.ENVIRONMENT == 'uat'
+        //         }
+        //     }
 
-            when {
+        //     steps {
 
-                expression {
+        //         script {
 
-                    params.ENVIRONMENT == 'uat'
-                }
-            }
+        //             env.UAT_IMAGE_TAG =
+        //                 "UAT-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
 
-            steps {
 
-                script {
+        //             env.UAT_IMAGE_URI =
+        //                 "${env.ECR_REGISTRY}/employee-mgm-uat-backend:${env.UAT_IMAGE_TAG}"
 
-                    env.UAT_IMAGE_TAG =
-                        "UAT-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
 
+        //             promoteImage(
+        //                 env.DEV_REPO,
+        //                 'employee-mgm-uat-backend',
+        //                 params.DEV_IMAGE_TAG,
+        //                 'UAT'
+        //             )
+        //         }
+        //     }
+        // }
 
-                    env.UAT_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/employee-mgm-uat-backend:${env.UAT_IMAGE_TAG}"
 
+        // stage('Deploy Backend - UAT') {
 
-                    promoteImage(
-                        env.DEV_REPO,
-                        'employee-mgm-uat-backend',
-                        params.DEV_IMAGE_TAG,
-                        'UAT'
-                    )
-                }
-            }
-        }
+        //     when {
 
+        //         expression {
 
-        stage('Deploy Backend - UAT') {
+        //             params.ENVIRONMENT == 'uat'
+        //         }
+        //     }
 
-            when {
+        //     steps {
 
-                expression {
+        //         script {
 
-                    params.ENVIRONMENT == 'uat'
-                }
-            }
+        //             deployBackend(
+        //                 'uat',
+        //                 'employee-mgm-uat-backend',
+        //                 env.UAT_IMAGE_TAG
+        //             )
+        //         }
+        //     }
+        // }
 
-            steps {
 
-                script {
+        // stage('Production Approval') {
 
-                    deployBackend(
-                        'uat',
-                        'employee-mgm-uat-backend',
-                        env.UAT_IMAGE_TAG
-                    )
-                }
-            }
-        }
+        //     when {
 
+        //         expression {
 
-        stage('Production Approval') {
+        //             params.ENVIRONMENT == 'prod'
+        //         }
+        //     }
 
-            when {
+        //     steps {
 
-                expression {
+        //         input(
 
-                    params.ENVIRONMENT == 'prod'
-                }
-            }
+        //             message:
+        //                 "DEV image ${params.DEV_IMAGE_TAG} is ready for PROD. " +
+        //                 "Deploy Employee Management Backend to PROD?",
 
-            steps {
+        //             ok:
+        //                 'Deploy to PROD'
+        //         )
+        //     }
+        // }
 
-                input(
 
-                    message:
-                        "DEV image ${params.DEV_IMAGE_TAG} is ready for PROD. " +
-                        "Deploy Employee Management Backend to PROD?",
+        // stage('PROD - Promote Image') {
 
-                    ok:
-                        'Deploy to PROD'
-                )
-            }
-        }
+        //     when {
 
+        //         expression {
 
-        stage('PROD - Promote Image') {
+        //             params.ENVIRONMENT == 'prod'
+        //         }
+        //     }
 
-            when {
+        //     steps {
 
-                expression {
+        //         script {
 
-                    params.ENVIRONMENT == 'prod'
-                }
-            }
+        //             env.PROD_IMAGE_TAG =
+        //                 "PROD-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
 
-            steps {
 
-                script {
+        //             env.PROD_IMAGE_URI =
+        //                 "${env.ECR_REGISTRY}/employee-mgm-prod-backend:${env.PROD_IMAGE_TAG}"
 
-                    env.PROD_IMAGE_TAG =
-                        "PROD-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
 
+        //             promoteImage(
+        //                 env.DEV_REPO,
+        //                 'employee-mgm-prod-backend',
+        //                 params.DEV_IMAGE_TAG,
+        //                 'PROD'
+        //             )
+        //         }
+        //     }
+        // }
 
-                    env.PROD_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/employee-mgm-prod-backend:${env.PROD_IMAGE_TAG}"
 
+        // stage('Deploy Backend - PROD') {
 
-                    promoteImage(
-                        env.DEV_REPO,
-                        'employee-mgm-prod-backend',
-                        params.DEV_IMAGE_TAG,
-                        'PROD'
-                    )
-                }
-            }
-        }
+        //     when {
 
+        //         expression {
 
-        stage('Deploy Backend - PROD') {
+        //             params.ENVIRONMENT == 'prod'
+        //         }
+        //     }
 
-            when {
+        //     steps {
 
-                expression {
+        //         script {
 
-                    params.ENVIRONMENT == 'prod'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    deployBackend(
-                        'prod',
-                        'employee-mgm-prod-backend',
-                        env.PROD_IMAGE_TAG
-                    )
-                }
-            }
-        }
+        //             deployBackend(
+        //                 'prod',
+        //                 'employee-mgm-prod-backend',
+        //                 env.PROD_IMAGE_TAG
+        //             )
+        //         }
+        //     }
+        // }
     }
 
 
