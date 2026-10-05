@@ -414,6 +414,7 @@ def promoteImage(
 }
 
 
+
 def deployDB(
     String environment,
     String repository,
@@ -422,7 +423,6 @@ def deployDB(
 
     def imageUri =
         "${env.ECR_REGISTRY}/${repository}:${imageTag}"
-
 
     def taskDefinitionFile =
         "new-db-task-definition-${environment}.json"
@@ -447,46 +447,39 @@ def deployDB(
 
     ]) {
 
-        sh """
+        withEnv([
+            "DEPLOY_ENV=${environment}",
+            "IMAGE_URI=${imageUri}",
+            "TASK_TEMPLATE=${env.TASK_DEFINITION_TEMPLATE}",
+            "OUTPUT_FILE=${taskDefinitionFile}",
+            "AWS_REGION_VALUE=${env.AWS_REGION}"
+        ]) {
 
-            set -e
+            sh '''
+                set -e
 
+                echo "AWS Identity:"
+                aws sts get-caller-identity
 
-            echo "AWS Identity:"
+                echo "Creating ECS task definition for ${DEPLOY_ENV}..."
 
-            aws sts get-caller-identity
-
-
-            echo "Creating ECS task definition for ${environment}..."
-
-
-            ENVIRONMENT="${environment}" \
-            IMAGE_URI="${imageUri}" \
-            TASK_DEFINITION_TEMPLATE="${env.TASK_DEFINITION_TEMPLATE}" \
-            OUTPUT_FILE="${taskDefinitionFile}" \
-            python3 - <<'PYTHON'
+                python3 - <<'PYTHON'
 
 import json
 import os
 
-
-input_file = os.environ["TASK_DEFINITION_TEMPLATE"]
+input_file = os.environ["TASK_TEMPLATE"]
 output_file = os.environ["OUTPUT_FILE"]
-environment = os.environ["ENVIRONMENT"]
+environment = os.environ["DEPLOY_ENV"]
 image_uri = os.environ["IMAGE_URI"]
 
-
 with open(input_file, "r") as f:
-
     task_definition = json.load(f)
-
 
 task_definition["family"] = \
     f"employee-mgm-{environment}-db"
 
-
 container_found = False
-
 
 for container in task_definition["containerDefinitions"]:
 
@@ -498,13 +491,11 @@ for container in task_definition["containerDefinitions"]:
 
         break
 
-
 if not container_found:
 
     raise Exception(
         "Container named 'db' was not found."
     )
-
 
 remove_fields = [
 
@@ -518,14 +509,12 @@ remove_fields = [
 
 ]
 
-
 for field in remove_fields:
 
     task_definition.pop(
         field,
         None
     )
-
 
 with open(output_file, "w") as f:
 
@@ -535,7 +524,6 @@ with open(output_file, "w") as f:
         indent=2
     )
 
-
 print("Task definition created:")
 print(output_file)
 
@@ -544,61 +532,52 @@ print(image_uri)
 
 PYTHON
 
+                echo "Generated task definition:"
+                cat "${OUTPUT_FILE}"
 
-            echo "Generated task definition:"
+                echo "Registering ECS task definition..."
 
-            cat ${taskDefinitionFile}
+                REVISION=$(aws ecs register-task-definition \
+                    --cli-input-json "file://${OUTPUT_FILE}" \
+                    --region "${AWS_REGION_VALUE}" \
+                    --query 'taskDefinition.revision' \
+                    --output text)
 
+                echo "AWS REGISTERED REVISION = ${REVISION}"
 
-            echo "Registering ECS task definition..."
+                if [ -z "${REVISION}" ] || \
+                   [ "${REVISION}" = "null" ] || \
+                   [ "${REVISION}" = "None" ]; then
 
+                    echo "ERROR: ECS returned invalid revision."
 
-            REVISION=\\$(aws ecs register-task-definition \
-                --cli-input-json file://${taskDefinitionFile} \
-                --region ${env.AWS_REGION} \
-                --query 'taskDefinition.revision' \
-                --output text)
+                    exit 1
 
+                fi
 
-            echo "AWS REGISTERED REVISION = \\$REVISION"
+                echo "Updating ECS DB service..."
 
+                aws ecs update-service \
+                    --cluster "employee-mgm-${DEPLOY_ENV}-cluster" \
+                    --service "employee-mgm-${DEPLOY_ENV}-db-service" \
+                    --task-definition "employee-mgm-${DEPLOY_ENV}-db:${REVISION}" \
+                    --force-new-deployment \
+                    --region "${AWS_REGION_VALUE}"
 
-            if [ -z "\\$REVISION" ] || \
-               [ "\\$REVISION" = "null" ] || \
-               [ "\\$REVISION" = "None" ]; then
+                echo "Waiting for ECS DB service to become stable..."
 
-                echo "ERROR: ECS returned invalid revision."
+                aws ecs wait services-stable \
+                    --cluster "employee-mgm-${DEPLOY_ENV}-cluster" \
+                    --services "employee-mgm-${DEPLOY_ENV}-db-service" \
+                    --region "${AWS_REGION_VALUE}"
 
-                exit 1
-
-            fi
-
-
-            echo "Updating ECS DB service..."
-
-
-            aws ecs update-service \
-                --cluster employee-mgm-${environment}-cluster \
-                --service employee-mgm-${environment}-db-service \
-                --task-definition employee-mgm-${environment}-db:\\$REVISION \
-                --force-new-deployment \
-                --region ${env.AWS_REGION}
-
-
-            echo "Waiting for ECS DB service to become stable..."
-
-
-            aws ecs wait services-stable \
-                --cluster employee-mgm-${environment}-cluster \
-                --services employee-mgm-${environment}-db-service \
-                --region ${env.AWS_REGION}
-
-
-            echo "============================================================"
-            echo "EMPLOYEE MANAGEMENT DB ${environment} DEPLOYMENT COMPLETED."
-            echo "IMAGE: ${imageUri}"
-            echo "============================================================"
-        """
+                echo "============================================================"
+                echo "EMPLOYEE MANAGEMENT DB ${DEPLOY_ENV} DEPLOYMENT COMPLETED."
+                echo "IMAGE: ${IMAGE_URI}"
+                echo "============================================================"
+            '''
+        }
     }
 }
+
 
