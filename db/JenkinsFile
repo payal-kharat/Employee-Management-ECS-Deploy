@@ -13,9 +13,9 @@ pipeline {
         ECR_REGISTRY ="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
         // DEV_REPO  = 'employee-mgm-dev-db'
-         QA_REPO   = 'employee-managemet-qa-db'
-        // UAT_REPO  = 'employee-managemet-uat-db'
-        // PROD_REPO = 'employee-managemet-prod-db'
+         QA_REPO   = 'employee-mgm-qa-db'
+        // UAT_REPO  = 'employee-mgm-uat-db'
+        // PROD_REPO = 'employee-mgm-prod-db'
 
         BUILD_CONTEXT ='./db'
 
