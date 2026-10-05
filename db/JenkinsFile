@@ -22,34 +22,24 @@ pipeline {
 
         AWS_REGION     = 'us-east-1'
         AWS_ACCOUNT_ID = '552940445807'
-
         AWS_CRED = 'AWS'
-
-        ECR_REGISTRY =
-            "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REGISTRY ="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
         DEV_REPO  = 'employee-mgm-dev-db'
         QA_REPO   = 'employee-mgm-qa-db'
         UAT_REPO  = 'employee-mgm-uat-db'
         PROD_REPO = 'employee-mgm-prod-db'
 
-        BUILD_CONTEXT =
-            './db'
+        BUILD_CONTEXT ='./db'
 
-        TASK_DEFINITION_TEMPLATE =
-            './db/task-definition.json'
+        TASK_DEFINITION_TEMPLATE ='./db/task-definition.json'
     }
 
 
     stages {
-
-
         stage('Checkout') {
-
             steps {
-
                 checkout scm
-
                 script {
 
                     env.COMMIT_ID =
@@ -69,29 +59,17 @@ pipeline {
 
 
         stage('DEV - Build Image') {
-
             when {
                 expression {
                     params.ENVIRONMENT == 'dev'
                 }
             }
-
             steps {
-
                 script {
-
-                    def imageTag =
-                        "DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
-
-                    env.DEV_IMAGE_TAG =
-                        imageTag
-
-                    def imageUri =
-                        "${env.ECR_REGISTRY}/${env.DEV_REPO}:${imageTag}"
-
-                    env.DEV_IMAGE_URI =
-                        imageUri
-
+                    def imageTag ="DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
+                    env.DEV_IMAGE_TAG =imageTag
+                    def imageUri ="${env.ECR_REGISTRY}/${env.DEV_REPO}:${imageTag}"
+                    env.DEV_IMAGE_URI =imageUri
 
                     echo "======================================"
                     echo "BUILD ENVIRONMENT = DEV"
@@ -103,8 +81,6 @@ pipeline {
 
 
                     echo "Building Employee Management DB Docker image..."
-
-
                     docker.withRegistry(
                         "https://${env.ECR_REGISTRY}",
                         "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
@@ -115,8 +91,6 @@ pipeline {
                             env.BUILD_CONTEXT
                         )
                     }
-
-
                     echo "Employee Management DB Docker image built successfully."
                 }
             }
@@ -124,23 +98,15 @@ pipeline {
 
 
         stage('DEV - Push Image') {
-
             when {
                 expression {
                     params.ENVIRONMENT == 'dev'
                 }
             }
-
             steps {
-
                 script {
-
-                    def imageUri =
-                        "${env.ECR_REGISTRY}/${env.DEV_REPO}:${env.DEV_IMAGE_TAG}"
-
-                    env.DEV_IMAGE_URI =
-                        imageUri
-
+                    def imageUri ="${env.ECR_REGISTRY}/${env.DEV_REPO}:${env.DEV_IMAGE_TAG}"
+                    env.DEV_IMAGE_URI =imageUri
 
                     echo "======================================"
                     echo "PUSHING EMPLOYEE MANAGEMENT DB IMAGE"
@@ -159,8 +125,6 @@ pipeline {
                             env.DEV_IMAGE_URI
                         ).push()
                     }
-
-
                     echo "Employee Management DB DEV image pushed successfully."
                 }
             }
@@ -168,17 +132,13 @@ pipeline {
 
 
         stage('Deploy DB - DEV') {
-
             when {
                 expression {
                     params.ENVIRONMENT == 'dev'
                 }
             }
-
             steps {
-
                 script {
-
                     deployDB(
                         'dev',
                         env.DEV_REPO,
@@ -189,182 +149,139 @@ pipeline {
         }
 
 
-        stage('QA - Promote Image') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'qa'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    env.QA_IMAGE_TAG =
-                        "QA-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-
-                    env.QA_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
-
-
-                    promoteImage(
-                        env.DEV_REPO,
-                        env.QA_REPO,
-                        params.DEV_IMAGE_TAG,
-                        'QA'
-                    )
-                }
-            }
-        }
+        // stage('QA - Promote Image') {
+        //     when {
+        //         expression {
+        //             params.ENVIRONMENT == 'qa'
+        //         }
+        //     }
+        //     steps {
+        //         script {
+        //             env.QA_IMAGE_TAG ="QA-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+        //             env.QA_IMAGE_URI ="${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
+        //             promoteImage(
+        //                 env.DEV_REPO,
+        //                 env.QA_REPO,
+        //                 params.DEV_IMAGE_TAG,
+        //                 'QA'
+        //             )
+        //         }
+        //     }
+        // }
 
 
-        stage('Deploy DB - QA') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'qa'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    deployDB(
-                        'qa',
-                        env.QA_REPO,
-                        env.QA_IMAGE_TAG
-                    )
-                }
-            }
-        }
+        // stage('Deploy DB - QA') {
+        //     when {
+        //         expression {
+        //             params.ENVIRONMENT == 'qa'
+        //         }
+        //     }
+        //     steps {
+        //         script {
+        //             deployDB(
+        //                 'qa',
+        //                 env.QA_REPO,
+        //                 env.QA_IMAGE_TAG
+        //             )
+        //         }
+        //     }
+        // }
 
 
-        stage('UAT - Promote Image') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'uat'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    env.UAT_IMAGE_TAG =
-                        "UAT-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-
-                    env.UAT_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
-
-
-                    promoteImage(
-                        env.DEV_REPO,
-                        env.UAT_REPO,
-                        params.DEV_IMAGE_TAG,
-                        'UAT'
-                    )
-                }
-            }
-        }
+        // stage('UAT - Promote Image') {
+        //     when {
+        //         expression {
+        //             params.ENVIRONMENT == 'uat'
+        //         }
+        //     }
+        //     steps {
+        //         script {
+        //             env.UAT_IMAGE_TAG ="UAT-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+        //             env.UAT_IMAGE_URI ="${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
+        //             promoteImage(
+        //                 env.DEV_REPO,
+        //                 env.UAT_REPO,
+        //                 params.DEV_IMAGE_TAG,
+        //                 'UAT'
+        //             )
+        //         }
+        //     }
+        // }
 
 
-        stage('Deploy DB - UAT') {
+        // stage('Deploy DB - UAT') {
+        //     when {
+        //         expression {
+        //             params.ENVIRONMENT == 'uat'
+        //         }
+        //     }
+        //     steps {
+        //         script {
+        //             deployDB(
+        //                 'uat',
+        //                 env.UAT_REPO,
+        //                 env.UAT_IMAGE_TAG
+        //             )
+        //         }
+        //     }
+        // }
 
-            when {
-                expression {
-                    params.ENVIRONMENT == 'uat'
-                }
-            }
+        // stage('PROD - Promote Image') {
+        //     when {
+        //         expression {
+        //             params.ENVIRONMENT == 'prod'
+        //         }
+        //     }
+        //     steps {
+        //         script {
+        //             env.PROD_IMAGE_TAG ="PROD-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+        //             env.PROD_IMAGE_URI ="${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
+        //             promoteImage(
+        //                 env.DEV_REPO,
+        //                 env.PROD_REPO,
+        //                 params.DEV_IMAGE_TAG,
+        //                 'PROD'
+        //             )
+        //         }
+        //     }
+        // }
+        // stage('Production Approval') {
+        //     when {
+        //         expression {
+        //             params.ENVIRONMENT == 'prod'
+        //         }
+        //     }
+        //     steps {
+        //         input(
+        //             message:
+        //                 "DEV image ${params.DEV_IMAGE_TAG} is ready for PROD. " +
+        //                 "Deploy Employee Management DB to PROD?",
+        //             ok:
+        //                 'Deploy to PROD'
+        //         )
+        //     }
+        // }
 
-            steps {
+        // stage('Deploy DB - PROD') {
 
-                script {
+        //     when {
+        //         expression {
+        //             params.ENVIRONMENT == 'prod'
+        //         }
+        //     }
 
-                    deployDB(
-                        'uat',
-                        env.UAT_REPO,
-                        env.UAT_IMAGE_TAG
-                    )
-                }
-            }
-        }
+        //     steps {
 
+        //         script {
 
-        stage('Production Approval') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'prod'
-                }
-            }
-
-            steps {
-
-                input(
-                    message:
-                        "DEV image ${params.DEV_IMAGE_TAG} is ready for PROD. " +
-                        "Deploy Employee Management DB to PROD?",
-
-                    ok:
-                        'Deploy to PROD'
-                )
-            }
-        }
-
-
-        stage('PROD - Promote Image') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'prod'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    env.PROD_IMAGE_TAG =
-                        "PROD-${params.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-
-                    env.PROD_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
-
-
-                    promoteImage(
-                        env.DEV_REPO,
-                        env.PROD_REPO,
-                        params.DEV_IMAGE_TAG,
-                        'PROD'
-                    )
-                }
-            }
-        }
-
-
-        stage('Deploy DB - PROD') {
-
-            when {
-                expression {
-                    params.ENVIRONMENT == 'prod'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    deployDB(
-                        'prod',
-                        env.PROD_REPO,
-                        env.PROD_IMAGE_TAG
-                    )
-                }
-            }
-        }
+        //             deployDB(
+        //                 'prod',
+        //                 env.PROD_REPO,
+        //                 env.PROD_IMAGE_TAG
+        //             )
+        //         }
+        //     }
+        // }
     }
 
 
