@@ -22,7 +22,7 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/employee-mgm-dev-frontend",
+          "awslogs-group": "/ecs/employee-mgm--frontend",
           "awslogs-create-group": "true",
           "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "ecs"
