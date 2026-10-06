@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -51,6 +52,7 @@ pipeline {
                 script {
                     def commitId = getCommitId()
                     env.DEV_IMAGE_TAG = "DEV-${commitId}-${env.BUILD_NUMBER}"
+
                     buildAndPush(
                         env.DEV_REPO,
                         env.BUILD_CONTEXT
@@ -68,12 +70,14 @@ pipeline {
             steps {
                 script {
                     env.DEV_IMAGE_TAG = params.IMAGE_TAG
+
                     promoteImage(
                         env.DEV_REPO,
                         env.QA_REPO,
                         env.DEV_IMAGE_TAG,
                         'QA'
                     )
+
                     env.QA_IMAGE_TAG = "QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
                 }
             }
@@ -93,6 +97,7 @@ pipeline {
                         env.QA_IMAGE_TAG,
                         'UAT'
                     )
+
                     env.UAT_IMAGE_TAG = "UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
                 }
             }
@@ -126,6 +131,7 @@ pipeline {
                         env.UAT_IMAGE_TAG,
                         'PROD'
                     )
+
                     env.PROD_IMAGE_TAG = "PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
                 }
             }
@@ -143,6 +149,7 @@ pipeline {
                     def imageTag = getImageTag(params.Environment)
                     def taskFamily = getTaskFamily(params.Environment)
                     def ecsService = getECSService(params.Environment)
+
                     deployToECS(
                         params.Environment,
                         repository,
@@ -242,6 +249,7 @@ def deployToECS(
 ) {
     def imageUri = "${env.ECR_REGISTRY}/${repository}:${imageTag}"
     def cluster = getECSCluster(environment)
+    def taskDefinitionFile = env.TASK_DEFINITION_FILE
 
     withCredentials([
         [
@@ -249,18 +257,18 @@ def deployToECS(
             credentialsId: env.AWS_CRED
         ]
     ]) {
-        sh """
-            set -e
-            aws sts get-caller-identity
-            sed -i 's|\\\\\\${ENV}|${environment}|g' ${env.TASK_DEFINITION_FILE}
-            sed -i 's|\\\\\\${IMAGE_URI}|${imageUri}|g' ${env.TASK_DEFINITION_FILE}
-        """
+        sh(
+            script: '''set -e
+aws sts get-caller-identity
+sed -i 's|\\${ENV}|''' + environment + '''|g' ''' + taskDefinitionFile + '''
+sed -i 's|\\${IMAGE_URI}|''' + imageUri + '''|g' ''' + taskDefinitionFile
+        )
 
         echo "Task definition after image replacement:"
 
         sh """
-            grep '"family"' ${env.TASK_DEFINITION_FILE}
-            grep '"image"' ${env.TASK_DEFINITION_FILE}
+            grep '"family"' ${taskDefinitionFile}
+            grep '"image"' ${taskDefinitionFile}
         """
 
         echo "Registering ECS task definition..."
@@ -268,7 +276,7 @@ def deployToECS(
         def taskRevision = sh(
             script: """
                 aws ecs register-task-definition \
-                    --cli-input-json file://${env.TASK_DEFINITION_FILE} \
+                    --cli-input-json file://${taskDefinitionFile} \
                     --region ${env.AWS_REGION} \
                     --query 'taskDefinition.revision' \
                     --output text
@@ -354,3 +362,4 @@ def getImageTag(String environment) {
 
     return imageTags[environment]
 }
+
