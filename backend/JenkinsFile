@@ -1,10 +1,7 @@
 
 pipeline {
-
     agent any
-
     parameters {
-
         choice(
             name: 'Environment',
             choices: ['dev', 'qa', 'uat', 'prod'],
@@ -23,11 +20,8 @@ pipeline {
 
         AWS_REGION     = 'us-east-1'
         AWS_ACCOUNT_ID = '552940445807'
-
         AWS_CRED = 'AWS'
-
-        ECR_REGISTRY =
-            "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REGISTRY ="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
 
         DEV_REPO  = 'employee-mgm-dev-backend'
@@ -36,21 +30,14 @@ pipeline {
         PROD_REPO = 'employee-mgm-prod-backend'
 
 
-        BUILD_CONTEXT =
-            './backend'
-
-        TASK_DEFINITION_TEMPLATE =
-            './backend/task-definition.json'
+        BUILD_CONTEXT ='./backend'
+        TASK_DEFINITION_TEMPLATE ='./backend/task-definition.json'
     }
 
 
     stages {
-
-
         stage('Validate Parameters') {
-
             steps {
-
                 script {
 
                     echo "============================================================"
@@ -70,8 +57,6 @@ pipeline {
                             "Example: DEV-cff5bc9-14"
                         )
                     }
-
-
                     if (
                         params.Environment in ['qa', 'uat', 'prod'] &&
                         !params.IMAGE_TAG.startsWith('DEV-')
@@ -88,13 +73,9 @@ pipeline {
 
 
         stage('Checkout') {
-
             steps {
-
                 checkout scm
-
                 script {
-
                     env.COMMIT_ID =
                         sh(
                             script: 'git rev-parse --short=7 HEAD',
@@ -111,34 +92,19 @@ pipeline {
 
 
         stage('DEV - Build Image') {
-
             when {
-
                 expression {
-
                     params.Environment == 'dev'
                 }
             }
 
             steps {
-
                 script {
 
-                    def imageTag =
-                        "DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
-
-
-                    env.DEV_IMAGE_TAG =
-                        imageTag
-
-
-                    def imageUri =
-                        "${env.ECR_REGISTRY}/${env.DEV_REPO}:${imageTag}"
-
-
-                    env.DEV_IMAGE_URI =
-                        imageUri
-
+                    def imageTag ="DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
+                    env.DEV_IMAGE_TAG =imageTag
+                    def imageUri ="${env.ECR_REGISTRY}/${env.DEV_REPO}:${imageTag}"
+                    env.DEV_IMAGE_URI =imageUri
 
                     echo "======================================"
                     echo "BUILD ENVIRONMENT = DEV"
@@ -162,8 +128,6 @@ pipeline {
                             env.BUILD_CONTEXT
                         )
                     }
-
-
                     echo "Employee Management Backend Docker image built successfully."
                 }
             }
@@ -171,11 +135,8 @@ pipeline {
 
 
         stage('DEV - Push Image') {
-
             when {
-
                 expression {
-
                     params.Environment == 'dev'
                 }
             }
@@ -231,14 +192,8 @@ pipeline {
 
                 script {
 
-                    env.DEV_IMAGE_TAG =
-                        params.IMAGE_TAG
-
-
-                    env.DEV_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.DEV_REPO}:${env.DEV_IMAGE_TAG}"
-
-
+                    env.DEV_IMAGE_TAG =params.IMAGE_TAG
+                    env.DEV_IMAGE_URI ="${env.ECR_REGISTRY}/${env.DEV_REPO}:${env.DEV_IMAGE_TAG}"
                     promoteImage(
                         env.DEV_REPO,
                         env.QA_REPO,
@@ -247,12 +202,8 @@ pipeline {
                     )
 
 
-                    env.QA_IMAGE_TAG =
-                        "QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-
-
-                    env.QA_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
+                    env.QA_IMAGE_TAG ="QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                    env.QA_IMAGE_URI ="${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
 
 
                     echo "============================================================"
@@ -287,12 +238,8 @@ pipeline {
                     )
 
 
-                    env.UAT_IMAGE_TAG =
-                        "UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-
-
-                    env.UAT_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
+                    env.UAT_IMAGE_TAG ="UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                    env.UAT_IMAGE_URI = "${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
 
 
                     echo "============================================================"
@@ -308,9 +255,7 @@ pipeline {
         stage('Promote UAT to PROD') {
 
             when {
-
                 expression {
-
                     params.Environment == 'prod'
                 }
             }
@@ -327,12 +272,8 @@ pipeline {
                     )
 
 
-                    env.PROD_IMAGE_TAG =
-                        "PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-
-
-                    env.PROD_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
+                    env.PROD_IMAGE_TAG ="PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                    env.PROD_IMAGE_URI = "${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
 
 
                     echo "============================================================"
@@ -483,16 +424,9 @@ def promoteImage(
     String targetEnvironment
 ) {
 
-    def sourceImage =
-        "${env.ECR_REGISTRY}/${sourceRepo}:${sourceTag}"
-
-
-    def targetTag =
-        "${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
-
-
-    def targetImage =
-        "${env.ECR_REGISTRY}/${targetRepo}:${targetTag}"
+    def sourceImage ="${env.ECR_REGISTRY}/${sourceRepo}:${sourceTag}"
+    def targetTag ="${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
+   def targetImage ="${env.ECR_REGISTRY}/${targetRepo}:${targetTag}"
 
 
     echo "============================================================"
