@@ -248,9 +248,7 @@ def deployToECS(
     String ecsService
 ) {
     def environment = params.Environment
-    def repository = getRepository(environment)
     def imageTag = getImageTag(environment)
-    def imageUri = "${env.ECR_REGISTRY}/${repository}:${imageTag}"
     def region = env.AWS_REGION
     def cluster = getECSCluster(environment)
 
@@ -264,7 +262,7 @@ def deployToECS(
             script: '''set -e
 aws sts get-caller-identity
 sed -i 's|\\${ENV}|''' + environment + '''|g' ''' + taskDefinitionFile + '''
-sed -i 's|\\${IMAGE_URI}|''' + imageUri + '''|g' ''' + taskDefinitionFile
+sed -i 's|\\${COMMIT_ID}|''' + imageTag + '''|g' ''' + taskDefinitionFile
         )
 
         echo "Task definition after image replacement:"
