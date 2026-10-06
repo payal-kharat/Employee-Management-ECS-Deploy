@@ -1,10 +1,8 @@
 
 pipeline {
-
     agent any
 
     parameters {
-
         choice(
             name: 'ENVIRONMENT',
             choices: ['dev', 'qa', 'uat', 'prod'],
@@ -18,58 +16,44 @@ pipeline {
         )
     }
 
-
     environment {
-
-        AWS_REGION     = 'us-east-1'
+        AWS_REGION = 'us-east-1'
         AWS_ACCOUNT_ID = '552940445807'
-
         AWS_CRED = 'AWS'
-        ECR_REGISTRY ="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REGISTRY_URL = "https://${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-
-        DEV_REPO  = 'employee-mgm-dev-frontend'
-        QA_REPO   = 'employee-mgm-qa-frontend'
-        UAT_REPO  = 'employee-mgm-uat-frontend'
+        DEV_REPO = 'employee-mgm-dev-frontend'
+        QA_REPO = 'employee-mgm-qa-frontend'
+        UAT_REPO = 'employee-mgm-uat-frontend'
         PROD_REPO = 'employee-mgm-prod-frontend'
 
-
-        BUILD_CONTEXT ='./frontend'
-        TASK_DEFINITION_TEMPLATE = './frontend/task-definition.json'
+        BUILD_CONTEXT = './frontend'
+        FRONTEND_DOCKERFILE = './frontend/Dockerfile'
+        TASK_DEFINITION_FILE = './frontend/task-definition.json'
     }
-
 
     stages {
         stage('Validate Parameters') {
-
             steps {
-
                 script {
-
-                    echo "============================================================"
-                    echo "ENVIRONMENT : ${params.ENVIRONMENT}"
-                    echo "DEV TAG     : ${params.DEV_IMAGE_TAG}"
-                    echo "============================================================"
-
+                    echo "ENVIRONMENT = ${params.ENVIRONMENT}"
+                    echo "DEV_IMAGE_TAG = ${params.DEV_IMAGE_TAG}"
 
                     if (
                         params.ENVIRONMENT in ['qa', 'uat', 'prod'] &&
                         !params.DEV_IMAGE_TAG?.trim()
                     ) {
-
                         error(
-                            "DEV_IMAGE_TAG is required for " +
-                            "${params.ENVIRONMENT}. " +
+                            "DEV_IMAGE_TAG is required for ${params.ENVIRONMENT}. " +
                             "Example: DEV-a1b2c3d-25"
                         )
                     }
-
 
                     if (
                         params.ENVIRONMENT in ['qa', 'uat', 'prod'] &&
                         !params.DEV_IMAGE_TAG.startsWith('DEV-')
                     ) {
-
                         error(
                             "DEV_IMAGE_TAG must be an existing DEV image tag. " +
                             "Example: DEV-a1b2c3d-25"
@@ -79,147 +63,53 @@ pipeline {
             }
         }
 
-
         stage('Checkout') {
-
             steps {
-
                 checkout scm
 
                 script {
+                    env.COMMIT_ID = sh(
+                        script: 'git rev-parse --short=7 HEAD',
+                        returnStdout: true
+                    ).trim()
 
-                    env.COMMIT_ID =
-                        sh(
-                            script: 'git rev-parse --short=7 HEAD',
-                            returnStdout: true
-                        ).trim()
-
-
-                    echo "======================================"
-                    echo "COMMIT ID   = ${env.COMMIT_ID}"
+                    echo "COMMIT_ID = ${env.COMMIT_ID}"
                     echo "ENVIRONMENT = ${params.ENVIRONMENT}"
-                    echo "DEV TAG     = ${params.DEV_IMAGE_TAG}"
-                    echo "======================================"
+                    echo "DEV_IMAGE_TAG = ${params.DEV_IMAGE_TAG}"
                 }
             }
         }
 
-
-        stage('DEV - Build Image') {
-
+        stage('Dev - Build & Push Frontend') {
             when {
-
                 expression {
-
                     params.ENVIRONMENT == 'dev'
                 }
             }
-
             steps {
-
                 script {
+                    def imageTag = "DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
 
-                    def imageTag ="DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
-                    env.DEV_IMAGE_TAG =  imageTag
-                    def imageUri ="${env.ECR_REGISTRY}/${env.DEV_REPO}:${imageTag}"
+                    env.DEV_IMAGE_TAG = imageTag
 
-                    env.DEV_IMAGE_URI = imageUri
-                    
-
-
-                    echo "======================================"
-                    echo "BUILD ENVIRONMENT = DEV"
-                    echo "COMMIT ID         = ${env.COMMIT_ID}"
-                    echo "IMAGE TAG         = ${imageTag}"
-                    echo "DEV REPOSITORY    = ${env.DEV_REPO}"
-                    echo "IMAGE URI         = ${imageUri}"
-                    echo "======================================"
-
-
-                    echo "Building Employee Management Frontend Docker image..."
-
-                    docker.withRegistry(
-                        "https://${env.ECR_REGISTRY}",
-                        "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
-                    ) {
-
-                        docker.build(
-                            imageUri,
-                            env.BUILD_CONTEXT
-                        )
-                    }
-
-
-                    echo "Employee Management Frontend Docker image built successfully."
+                    buildAndPush(
+                        env.DEV_REPO,
+                        imageTag,
+                        env.BUILD_CONTEXT
+                    )
                 }
             }
         }
 
-
-        stage('DEV - Push Image') {
-
+        stage('Promote Frontend Dev to QA') {
             when {
-
                 expression {
-
-                    params.ENVIRONMENT == 'dev'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    if (!env.DEV_IMAGE_URI?.trim()) {
-
-                        error(
-                            "DEV_IMAGE_URI is empty. " +
-                            "DEV image was not built successfully."
-                        )
-                    }
-
-
-                    echo "======================================"
-                    echo "PUSHING EMPLOYEE MANAGEMENT FRONTEND IMAGE"
-                    echo "DEV REPOSITORY = ${env.DEV_REPO}"
-                    echo "IMAGE URI       = ${env.DEV_IMAGE_URI}"
-                    echo "======================================"
-
-
-                    docker.withRegistry(
-                        "https://${env.ECR_REGISTRY}",
-                        "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
-                    ) {
-
-                        docker.image(
-                            env.DEV_IMAGE_URI
-                        ).push()
-                    }
-
-
-                    echo "Employee Management Frontend DEV image pushed successfully."
-                }
-            }
-        }
-
-
-        stage('Promote DEV to QA') {
-
-            when {
-
-                expression {
-
                     params.ENVIRONMENT in ['qa', 'uat', 'prod']
                 }
             }
-
             steps {
-
                 script {
-
-                    env.DEV_IMAGE_TAG =params.DEV_IMAGE_TAG
-                    env.DEV_IMAGE_URI ="${env.ECR_REGISTRY}/${env.DEV_REPO}:${env.DEV_IMAGE_TAG}"
-
+                    env.DEV_IMAGE_TAG = params.DEV_IMAGE_TAG
 
                     promoteImage(
                         env.DEV_REPO,
@@ -228,35 +118,20 @@ pipeline {
                         'QA'
                     )
 
-
-                    env.QA_IMAGE_TAG ="QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-                    env.QA_IMAGE_URI ="${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
-
-
-                    echo "============================================================"
-                    echo "DEV → QA PROMOTION COMPLETED"
-                    echo "DEV IMAGE : ${env.DEV_IMAGE_URI}"
-                    echo "QA IMAGE  : ${env.QA_IMAGE_URI}"
-                    echo "============================================================"
+                    env.QA_IMAGE_TAG =
+                        "QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
                 }
             }
         }
 
-
-        stage('Promote QA to UAT') {
-
+        stage('Promote Frontend QA to UAT') {
             when {
-
                 expression {
-
                     params.ENVIRONMENT in ['uat', 'prod']
                 }
             }
-
             steps {
-
                 script {
-
                     promoteImage(
                         env.QA_REPO,
                         env.UAT_REPO,
@@ -264,35 +139,34 @@ pipeline {
                         'UAT'
                     )
 
-
-                    env.UAT_IMAGE_TAG ="UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-                    env.UAT_IMAGE_URI ="${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
-
-
-                    echo "============================================================"
-                    echo "QA → UAT PROMOTION COMPLETED"
-                    echo "QA IMAGE  : ${env.QA_IMAGE_URI}"
-                    echo "UAT IMAGE : ${env.UAT_IMAGE_URI}"
-                    echo "============================================================"
+                    env.UAT_IMAGE_TAG =
+                        "UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
                 }
             }
         }
 
-
-        stage('Promote UAT to PROD') {
-
+        stage('Production Approval') {
             when {
-
                 expression {
-
                     params.ENVIRONMENT == 'prod'
                 }
             }
-
             steps {
+                input(
+                    message: 'DEV → QA → UAT Frontend promotion completed. Deploy Employee Management Frontend to PROD?',
+                    ok: 'Deploy to PROD'
+                )
+            }
+        }
 
+        stage('Promote Frontend UAT to PROD') {
+            when {
+                expression {
+                    params.ENVIRONMENT == 'prod'
+                }
+            }
+            steps {
                 script {
-
                     promoteImage(
                         env.UAT_REPO,
                         env.PROD_REPO,
@@ -300,438 +174,230 @@ pipeline {
                         'PROD'
                     )
 
-
-                    env.PROD_IMAGE_TAG ="PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-                    env.PROD_IMAGE_URI ="${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
-
-
-                    echo "============================================================"
-                    echo "UAT → PROD PROMOTION COMPLETED"
-                    echo "UAT IMAGE  : ${env.UAT_IMAGE_URI}"
-                    echo "PROD IMAGE : ${env.PROD_IMAGE_URI}"
-                    echo "============================================================"
+                    env.PROD_IMAGE_TAG =
+                        "PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
                 }
             }
         }
 
-
         stage('Deploy Frontend') {
-
             when {
-
                 expression {
-
                     params.ENVIRONMENT in ['dev', 'qa', 'uat', 'prod']
                 }
             }
-
             steps {
-
                 script {
+                    def taskFamily = getTaskFamily(params.ENVIRONMENT)
+                    def ecsService = getECSService(params.ENVIRONMENT)
 
-                    if (params.ENVIRONMENT == 'dev') {
-
-                        deployFrontend(
-                            'dev',
-                            env.DEV_REPO,
-                            env.DEV_IMAGE_TAG
-                        )
-                    }
-
-
-                    if (params.ENVIRONMENT == 'qa') {
-
-                        deployFrontend(
-                            'qa',
-                            env.QA_REPO,
-                            env.QA_IMAGE_TAG
-                        )
-                    }
-
-
-                    if (params.ENVIRONMENT == 'uat') {
-
-                        deployFrontend(
-                            'uat',
-                            env.UAT_REPO,
-                            env.UAT_IMAGE_TAG
-                        )
-                    }
-                }
-            }
-        }
-
-
-        stage('Production Approval') {
-
-            when {
-
-                expression {
-
-                    params.ENVIRONMENT == 'prod'
-                }
-            }
-
-            steps {
-
-                input(
-
-                    message:
-                        "DEV → QA → UAT Frontend promotion completed. " +
-                        "Deploy Employee Management Frontend to PROD?",
-
-                    ok:
-                        'Deploy to PROD'
-                )
-            }
-        }
-
-
-        stage('Deploy Frontend - PROD') {
-
-            when {
-
-                expression {
-
-                    params.ENVIRONMENT == 'prod'
-                }
-            }
-
-            steps {
-
-                script {
-
-                    deployFrontend(
-                        'prod',
-                        env.PROD_REPO,
-                        env.PROD_IMAGE_TAG
+                    deployToECS(
+                        env.TASK_DEFINITION_FILE,
+                        taskFamily,
+                        ecsService
                     )
                 }
             }
         }
     }
 
-
     post {
-
         always {
-
-            echo 'Cleaning Jenkins workspace...'
-
-            cleanWs()
-        }
-
-
-        success {
-
-            echo '''
-============================================================
-EMPLOYEE MANAGEMENT FRONTEND ECS CI/CD COMPLETED SUCCESSFULLY.
-
-DEV  -> QA -> UAT -> PROD
-============================================================
-'''
-        }
-
-
-        failure {
-
-            echo '''
-============================================================
-EMPLOYEE MANAGEMENT FRONTEND ECS CI/CD FAILED.
-
-Check the Jenkins console output.
-============================================================
-'''
+            deleteDir()
         }
     }
 }
 
+def getCommitId() {
+    return sh(
+        script: 'git rev-parse --short=7 HEAD',
+        returnStdout: true
+    ).trim()
+}
+
+def buildAndPush(
+    String repository,
+    String imageTag,
+    String buildContext
+) {
+    def imageUri = "${env.ECR_REGISTRY}/${repository}:${imageTag}"
+
+    echo "Building image: ${imageUri}"
+
+    def image = docker.build(
+        imageUri,
+        "-f ${env.FRONTEND_DOCKERFILE} ${buildContext}"
+    )
+
+    docker.withRegistry(
+        env.ECR_REGISTRY_URL,
+        "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
+    ) {
+        image.push()
+    }
+
+    echo "Frontend image pushed successfully."
+}
 
 def promoteImage(
-    String sourceRepo,
-    String targetRepo,
+    String sourceRepository,
+    String targetRepository,
     String sourceTag,
     String targetEnvironment
 ) {
+    def sourceImage =
+        "${env.ECR_REGISTRY}/${sourceRepository}:${sourceTag}"
 
-    def sourceImage ="${env.ECR_REGISTRY}/${sourceRepo}:${sourceTag}"
-    def targetTag ="${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
-       
+    def targetTag =
+        "${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
 
+    def targetImage =
+        "${env.ECR_REGISTRY}/${targetRepository}:${targetTag}"
 
-    def targetImage ="${env.ECR_REGISTRY}/${targetRepo}:${targetTag}"
-        
-    echo "============================================================"
-    echo "PROMOTING EMPLOYEE MANAGEMENT FRONTEND IMAGE"
-    echo "============================================================"
-    echo "SOURCE REPOSITORY : ${sourceRepo}"
-    echo "SOURCE IMAGE      : ${sourceImage}"
-    echo "TARGET REPOSITORY : ${targetRepo}"
-    echo "TARGET IMAGE      : ${targetImage}"
-    echo "============================================================"
-
+    echo "Source image: ${sourceImage}"
+    echo "Target image: ${targetImage}"
 
     withCredentials([
-
         [
             $class: 'AmazonWebServicesCredentialsBinding',
-            credentialsId: "${env.AWS_CRED}"
+            credentialsId: env.AWS_CRED
         ]
-
     ]) {
+        docker.withRegistry(
+            env.ECR_REGISTRY_URL,
+            "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
+        ) {
+            docker.image(sourceImage).pull()
+        }
 
         sh """
-
-            set -e
-
-
-            echo "AWS Identity:"
-
-
-            aws sts get-caller-identity
-
-
-            echo "Logging in to ECR..."
-
-
-            aws ecr get-login-password \
-                --region ${env.AWS_REGION} \
-                | docker login \
-                    --username AWS \
-                    --password-stdin ${env.ECR_REGISTRY}
-
-
-            echo "Pulling source image..."
-
-
-            docker pull ${sourceImage}
-
-
-            echo "Tagging image..."
-
-
             docker tag \
                 ${sourceImage} \
                 ${targetImage}
-
-
-            echo "Pushing promoted image..."
-
-
-            docker push ${targetImage}
-
-
-            echo "============================================================"
-            echo "PROMOTION COMPLETED"
-            echo "SOURCE IMAGE: ${sourceImage}"
-            echo "TARGET IMAGE: ${targetImage}"
-            echo "============================================================"
-
         """
+
+        docker.withRegistry(
+            env.ECR_REGISTRY_URL,
+            "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
+        ) {
+            docker.image(targetImage).push()
+        }
+    }
+
+    echo "Frontend image promoted successfully."
+}
+
+def deployToECS(
+    String taskDefinitionFile,
+    String taskFamily,
+    String ecsService
+) {
+    def environment = params.ENVIRONMENT
+    def imageTag = getImageTag(environment)
+    def region = env.AWS_REGION
+    def cluster = getECSCluster(environment)
+
+    withCredentials([
+        [
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: env.AWS_CRED
+        ]
+    ]) {
+        sh(
+            script: '''set -e
+aws sts get-caller-identity
+sed -i 's|\\${ENV}|''' + environment + '''|g' ''' + taskDefinitionFile + '''
+sed -i 's|\\${COMMIT_ID}|''' + imageTag + '''|g' ''' + taskDefinitionFile
+        )
+
+        echo "Task definition after image replacement:"
+
+        sh """
+            grep '"family"' ${taskDefinitionFile}
+            grep '"image"' ${taskDefinitionFile}
+        """
+
+        echo "Registering ECS task definition..."
+
+        def taskRevision = sh(
+            script: """
+                aws ecs register-task-definition \
+                    --cli-input-json file://${taskDefinitionFile} \
+                    --region ${region} \
+                    --query 'taskDefinition.revision' \
+                    --output text
+            """,
+            returnStdout: true
+        ).trim()
+
+        echo "Task definition revision: ${taskRevision}"
+
+        echo "Updating ECS service..."
+
+        sh """
+            aws ecs update-service \
+                --cluster ${cluster} \
+                --service ${ecsService} \
+                --task-definition ${taskFamily}:${taskRevision} \
+                --region ${region}
+        """
+
+        echo "Frontend ECS deployment completed successfully."
     }
 }
 
-
-def deployFrontend(
-    String environment,
-    String repository,
-    String imageTag
-) {
-
-    def imageUri ="${env.ECR_REGISTRY}/${repository}:${imageTag}"
-        
-    def taskDefinitionFile ="new-frontend-task-definition-${environment}.json
-      
-
-
-    echo "============================================================"
-    echo "DEPLOYING EMPLOYEE MANAGEMENT FRONTEND"
-    echo "============================================================"
-    echo "Environment : ${environment}"
-    echo "Repository  : ${repository}"
-    echo "Image Tag   : ${imageTag}"
-    echo "Image URI   : ${imageUri}"
-    echo "============================================================"
-
-
-    withCredentials([
-
-        [
-            $class: 'AmazonWebServicesCredentialsBinding',
-            credentialsId: "${env.AWS_CRED}"
-        ]
-
-    ]) {
-
-        withEnv([
-
-            "DEPLOY_ENV=${environment}",
-            "IMAGE_URI=${imageUri}",
-            "TASK_TEMPLATE=${env.TASK_DEFINITION_TEMPLATE}",
-            "OUTPUT_FILE=${taskDefinitionFile}",
-            "AWS_REGION_VALUE=${env.AWS_REGION}"
-
-        ]) {
-
-            sh '''
-
-                set -e
-
-
-                echo "AWS Identity:"
-
-
-                aws sts get-caller-identity
-
-
-                echo "Creating ECS task definition for ${DEPLOY_ENV}..."
-
-
-                python3 - <<'PYTHON'
-
-import json
-import os
-
-
-input_file = os.environ["TASK_TEMPLATE"]
-
-output_file = os.environ["OUTPUT_FILE"]
-
-environment = os.environ["DEPLOY_ENV"]
-
-image_uri = os.environ["IMAGE_URI"]
-
-
-with open(input_file, "r") as f:
-
-    task_definition = json.load(f)
-
-
-task_definition["family"] = \
-    f"employee-mgm-{environment}-frontend"
-
-
-container_found = False
-
-
-for container in task_definition["containerDefinitions"]:
-
-    if container["name"] == "frontend":
-
-        container["image"] = image_uri
-
-        container_found = True
-
-        break
-
-
-if not container_found:
-
-    raise Exception(
-        "Container named 'frontend' was not found."
-    )
-
-
-remove_fields = [
-
-    "taskDefinitionArn",
-    "revision",
-    "status",
-    "requiresAttributes",
-    "compatibilities",
-    "registeredAt",
-    "registeredBy"
-
-]
-
-
-for field in remove_fields:
-
-    task_definition.pop(
-        field,
-        None
-    )
-
-
-with open(output_file, "w") as f:
-
-    json.dump(
-        task_definition,
-        f,
-        indent=2
-    )
-
-
-print("Task definition created:")
-
-print(output_file)
-
-
-print("Frontend image:")
-
-print(image_uri)
-
-PYTHON
-
-
-                echo "Generated task definition:"
-
-
-                cat "${OUTPUT_FILE}"
-
-
-                echo "Registering ECS task definition..."
-
-
-                REVISION=$(aws ecs register-task-definition \
-                    --cli-input-json "file://${OUTPUT_FILE}" \
-                    --region "${AWS_REGION_VALUE}" \
-                    --query 'taskDefinition.revision' \
-                    --output text)
-
-
-                echo "AWS REGISTERED REVISION = ${REVISION}"
-
-
-                if [ -z "${REVISION}" ] || \
-                   [ "${REVISION}" = "null" ] || \
-                   [ "${REVISION}" = "None" ]; then
-
-                    echo "ERROR: ECS returned invalid revision."
-
-                    exit 1
-
-                fi
-
-
-                echo "Updating ECS Frontend service..."
-
-
-                aws ecs update-service \
-                    --cluster "employee-mgm-${DEPLOY_ENV}-cluster" \
-                    --service "employee-mgm-${DEPLOY_ENV}-frontend-service" \
-                    --task-definition "employee-mgm-${DEPLOY_ENV}-frontend:${REVISION}" \
-                    --force-new-deployment \
-                    --region "${AWS_REGION_VALUE}"
-
-
-                echo "Waiting for ECS Frontend service to become stable..."
-
-
-                aws ecs wait services-stable \
-                    --cluster "employee-mgm-${DEPLOY_ENV}-cluster" \
-                    --services "employee-mgm-${DEPLOY_ENV}-frontend-service" \
-                    --region "${AWS_REGION_VALUE}"
-
-
-                echo "============================================================"
-                echo "EMPLOYEE MANAGEMENT FRONTEND ${DEPLOY_ENV} DEPLOYMENT COMPLETED."
-                echo "IMAGE: ${IMAGE_URI}"
-                echo "============================================================"
-
-            '''
-        }
-    }
+def getECSCluster(String environment) {
+    def clusters = [
+        dev: 'employee-mgm-dev-cluster',
+        qa: 'employee-mgm-qa-cluster',
+        uat: 'employee-mgm-uat-cluster',
+        prod: 'employee-mgm-prod-cluster'
+    ]
+
+    return clusters[environment]
+}
+
+def getTaskFamily(String environment) {
+    def taskFamilies = [
+        dev: 'employee-mgm-dev-frontend',
+        qa: 'employee-mgm-qa-frontend',
+        uat: 'employee-mgm-uat-frontend',
+        prod: 'employee-mgm-prod-frontend'
+    ]
+
+    return taskFamilies[environment]
+}
+
+def getECSService(String environment) {
+    def services = [
+        dev: 'employee-mgm-dev-frontend-service',
+        qa: 'employee-mgm-qa-frontend-service',
+        uat: 'employee-mgm-uat-frontend-service',
+        prod: 'employee-mgm-prod-frontend-service'
+    ]
+
+    return services[environment]
+}
+
+def getRepository(String environment) {
+    def repositories = [
+        dev: env.DEV_REPO,
+        qa: env.QA_REPO,
+        uat: env.UAT_REPO,
+        prod: env.PROD_REPO
+    ]
+
+    return repositories[environment]
+}
+
+def getImageTag(String environment) {
+    def imageTags = [
+        dev: env.DEV_IMAGE_TAG,
+        qa: env.QA_IMAGE_TAG,
+        uat: env.UAT_IMAGE_TAG,
+        prod: env.PROD_IMAGE_TAG
+    ]
+
+    return imageTags[environment]
 }
 
