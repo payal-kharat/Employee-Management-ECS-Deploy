@@ -2,7 +2,7 @@
   "containerDefinitions": [
     {
       "name": "frontend",
-      "image": "nginx:1.13-alpine",
+      "image": "552940445807.dkr.ecr.us-east-1.amazonaws.com/employee-mgm-${ENV}-frontend:${COMMIT_ID}",
       "cpu": 0,
       "portMappings": [
         {
