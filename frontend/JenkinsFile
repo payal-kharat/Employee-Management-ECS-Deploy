@@ -25,9 +25,7 @@ pipeline {
         AWS_ACCOUNT_ID = '552940445807'
 
         AWS_CRED = 'AWS'
-
-        ECR_REGISTRY =
-            "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REGISTRY ="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
 
         DEV_REPO  = 'employee-mgm-dev-frontend'
@@ -36,17 +34,12 @@ pipeline {
         PROD_REPO = 'employee-mgm-prod-frontend'
 
 
-        BUILD_CONTEXT =
-            './frontend'
-
-        TASK_DEFINITION_TEMPLATE =
-            './frontend/task-definition.json'
+        BUILD_CONTEXT ='./frontend'
+        TASK_DEFINITION_TEMPLATE = './frontend/task-definition.json'
     }
 
 
     stages {
-
-
         stage('Validate Parameters') {
 
             steps {
@@ -126,20 +119,12 @@ pipeline {
 
                 script {
 
-                    def imageTag =
-                        "DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
+                    def imageTag ="DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
+                    env.DEV_IMAGE_TAG =  imageTag
+                    def imageUri ="${env.ECR_REGISTRY}/${env.DEV_REPO}:${imageTag}"
 
-
-                    env.DEV_IMAGE_TAG =
-                        imageTag
-
-
-                    def imageUri =
-                        "${env.ECR_REGISTRY}/${env.DEV_REPO}:${imageTag}"
-
-
-                    env.DEV_IMAGE_URI =
-                        imageUri
+                    env.DEV_IMAGE_URI = imageUri
+                    
 
 
                     echo "======================================"
@@ -152,7 +137,6 @@ pipeline {
 
 
                     echo "Building Employee Management Frontend Docker image..."
-
 
                     docker.withRegistry(
                         "https://${env.ECR_REGISTRY}",
@@ -233,12 +217,8 @@ pipeline {
 
                 script {
 
-                    env.DEV_IMAGE_TAG =
-                        params.DEV_IMAGE_TAG
-
-
-                    env.DEV_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.DEV_REPO}:${env.DEV_IMAGE_TAG}"
+                    env.DEV_IMAGE_TAG =params.DEV_IMAGE_TAG
+                    env.DEV_IMAGE_URI ="${env.ECR_REGISTRY}/${env.DEV_REPO}:${env.DEV_IMAGE_TAG}"
 
 
                     promoteImage(
@@ -249,12 +229,8 @@ pipeline {
                     )
 
 
-                    env.QA_IMAGE_TAG =
-                        "QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-
-
-                    env.QA_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
+                    env.QA_IMAGE_TAG ="QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                    env.QA_IMAGE_URI ="${env.ECR_REGISTRY}/${env.QA_REPO}:${env.QA_IMAGE_TAG}"
 
 
                     echo "============================================================"
@@ -289,12 +265,8 @@ pipeline {
                     )
 
 
-                    env.UAT_IMAGE_TAG =
-                        "UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-
-
-                    env.UAT_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
+                    env.UAT_IMAGE_TAG ="UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                    env.UAT_IMAGE_URI ="${env.ECR_REGISTRY}/${env.UAT_REPO}:${env.UAT_IMAGE_TAG}"
 
 
                     echo "============================================================"
@@ -329,12 +301,8 @@ pipeline {
                     )
 
 
-                    env.PROD_IMAGE_TAG =
-                        "PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
-
-
-                    env.PROD_IMAGE_URI =
-                        "${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
+                    env.PROD_IMAGE_TAG ="PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                    env.PROD_IMAGE_URI ="${env.ECR_REGISTRY}/${env.PROD_REPO}:${env.PROD_IMAGE_TAG}"
 
 
                     echo "============================================================"
@@ -487,18 +455,13 @@ def promoteImage(
     String targetEnvironment
 ) {
 
-    def sourceImage =
-        "${env.ECR_REGISTRY}/${sourceRepo}:${sourceTag}"
+    def sourceImage ="${env.ECR_REGISTRY}/${sourceRepo}:${sourceTag}"
+    def targetTag ="${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
+       
 
 
-    def targetTag =
-        "${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
-
-
-    def targetImage =
-        "${env.ECR_REGISTRY}/${targetRepo}:${targetTag}"
-
-
+    def targetImage ="${env.ECR_REGISTRY}/${targetRepo}:${targetTag}"
+        
     echo "============================================================"
     echo "PROMOTING EMPLOYEE MANAGEMENT FRONTEND IMAGE"
     echo "============================================================"
@@ -576,12 +539,10 @@ def deployFrontend(
     String imageTag
 ) {
 
-    def imageUri =
-        "${env.ECR_REGISTRY}/${repository}:${imageTag}"
-
-
-    def taskDefinitionFile =
-        "new-frontend-task-definition-${environment}.json"
+    def imageUri ="${env.ECR_REGISTRY}/${repository}:${imageTag}"
+        
+    def taskDefinitionFile ="new-frontend-task-definition-${environment}.json
+      
 
 
     echo "============================================================"
