@@ -22,7 +22,7 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/employee-mgm-dev-frontend",
+          "awslogs-group": "/ecs/employee-mgm-${ENV}-frontend",
           "awslogs-create-group": "true",
           "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "ecs"
@@ -33,8 +33,8 @@
     }
   ],
   "family": "employee-mgm-${ENV}-frontend",
-  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-dev-ecs-execution-role",
-  "taskRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-dev-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-${ENV}-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-${ENV}-ecs-task-role",
   "networkMode": "awsvpc",
   "requiresCompatibilities": [
     "FARGATE"
