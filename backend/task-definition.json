@@ -20,7 +20,7 @@
         },
         {
           "name": "DB_HOST",
-          "value": "emp-db.emp-dev.local"
+          "value": "emp-db.emp-${ENV}.local"
         },
         {
           "name": "DB_PORT",
@@ -38,7 +38,7 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/employee-mgm-dev-backend",
+          "awslogs-group": "/ecs/employee-mgm-${ENV}-backend",
           "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "backend"
         }
@@ -46,9 +46,9 @@
       "systemControls": []
     }
   ],
-  "family": "employee-mgm-dev-backend",
-  "taskRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-dev-ecs-task-role",
-  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-dev-ecs-execution-role",
+  "family": "employee-mgm-${ENV}-backend",
+  "taskRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-${ENV}-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-${ENV}ecs-execution-role",
   "networkMode": "awsvpc",
   "requiresCompatibilities": [
     "FARGATE"
