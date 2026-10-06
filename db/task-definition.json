@@ -2,7 +2,7 @@
   "containerDefinitions": [
     {
       "name": "db",
-      "image": "mariadb:10-focal",
+      "image": "552940445807.dkr.ecr.us-east-1.amazonaws.com/employee-mgm-${ENV}-backend:${COMMIT_ID}",
       "cpu": 0,
       "portMappings": [
         {
