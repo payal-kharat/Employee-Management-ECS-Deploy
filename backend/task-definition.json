@@ -2,7 +2,7 @@
   "containerDefinitions": [
     {
       "name": "backend",
-      "image": "hasicorp/http-echo:1.0",
+      "image": "552940445807.dkr.ecr.us-east-1.amazonaws.com/employee-mgm-${ENV}-backend:${COMMIT_ID}",
       "cpu": 0,
       "portMappings": [
         {
