@@ -145,15 +145,11 @@ pipeline {
             }
             steps {
                 script {
-                    def repository = getRepository(params.Environment)
-                    def imageTag = getImageTag(params.Environment)
                     def taskFamily = getTaskFamily(params.Environment)
                     def ecsService = getECSService(params.Environment)
 
                     deployToECS(
-                        params.Environment,
-                        repository,
-                        imageTag,
+                        env.TASK_DEFINITION_FILE,
                         taskFamily,
                         ecsService
                     )
@@ -222,34 +218,41 @@ def promoteImage(
             credentialsId: env.AWS_CRED
         ]
     ]) {
+        docker.withRegistry(
+            "${env.ECR_REGISTRY_URL}",
+            "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
+        ) {
+            docker.image(sourceImage).pull()
+        }
+
         sh """
-            set -e
-            aws ecr get-login-password \
-                --region ${env.AWS_REGION} \
-                | docker login \
-                    --username AWS \
-                    --password-stdin ${env.ECR_REGISTRY}
-            docker pull ${sourceImage}
             docker tag \
                 ${sourceImage} \
                 ${targetImage}
-            docker push ${targetImage}
         """
+
+        docker.withRegistry(
+            "${env.ECR_REGISTRY_URL}",
+            "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
+        ) {
+            docker.image(targetImage).push()
+        }
     }
 
     echo "DB image promoted successfully."
 }
 
 def deployToECS(
-    String environment,
-    String repository,
-    String imageTag,
+    String taskDefinitionFile,
     String taskFamily,
     String ecsService
 ) {
+    def environment = params.Environment
+    def repository = getRepository(environment)
+    def imageTag = getImageTag(environment)
     def imageUri = "${env.ECR_REGISTRY}/${repository}:${imageTag}"
+    def region = env.AWS_REGION
     def cluster = getECSCluster(environment)
-    def taskDefinitionFile = env.TASK_DEFINITION_FILE
 
     withCredentials([
         [
@@ -277,7 +280,7 @@ sed -i 's|\\${IMAGE_URI}|''' + imageUri + '''|g' ''' + taskDefinitionFile
             script: """
                 aws ecs register-task-definition \
                     --cli-input-json file://${taskDefinitionFile} \
-                    --region ${env.AWS_REGION} \
+                    --region ${region} \
                     --query 'taskDefinition.revision' \
                     --output text
             """,
@@ -286,22 +289,14 @@ sed -i 's|\\${IMAGE_URI}|''' + imageUri + '''|g' ''' + taskDefinitionFile
 
         echo "Task definition revision: ${taskRevision}"
 
+        echo "Updating ECS service..."
+
         sh """
             aws ecs update-service \
                 --cluster ${cluster} \
                 --service ${ecsService} \
                 --task-definition ${taskFamily}:${taskRevision} \
-                --force-new-deployment \
-                --region ${env.AWS_REGION}
-        """
-
-        echo "Waiting for ECS service to become stable..."
-
-        sh """
-            aws ecs wait services-stable \
-                --cluster ${cluster} \
-                --services ${ecsService} \
-                --region ${env.AWS_REGION}
+                --region ${region}
         """
 
         echo "ECS deployment completed successfully."
