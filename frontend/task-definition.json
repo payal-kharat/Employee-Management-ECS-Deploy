@@ -14,7 +14,12 @@
         }
       ],
       "essential": true,
-      "environment": [],
+      "environment": [
+        {
+          "name": "BACKEND_HOST",
+          "value": "emp-backend.emp-${ENV}.local"
+        }
+      ],
       "environmentFiles": [],
       "mountPoints": [],
       "volumesFrom": [],
