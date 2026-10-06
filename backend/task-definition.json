@@ -48,7 +48,7 @@
   ],
   "family": "employee-mgm-${ENV}-backend",
   "taskRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-${ENV}-ecs-task-role",
-  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-${ENV}ecs-execution-role",
+  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-${ENV}-ecs-execution-role",
   "networkMode": "awsvpc",
   "requiresCompatibilities": [
     "FARGATE"
