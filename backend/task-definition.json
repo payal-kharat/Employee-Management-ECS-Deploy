@@ -2,7 +2,7 @@
   "containerDefinitions": [
     {
       "name": "backend",
-      "image": "python:3.10-alpine",
+      "image": "hasicorp/http-echo:1.0",
       "cpu": 0,
       "portMappings": [
         {
@@ -14,6 +14,10 @@
       ],
       "essential": true,
       "environment": [
+        {
+          "name": "DB_NAME",
+          "value": "employee_db"
+        },
         {
           "name": "DB_HOST",
           "value": "emp-db.emp-dev.local"
@@ -29,30 +33,22 @@
         {
           "name": "DB_PASSWORD",
           "value": "employee123"
-        },
-        {
-          "name": "DB_NAME",
-          "value": "employee_db"
         }
       ],
-      "mountPoints": [],
-      "volumesFrom": [],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/employee-mgm-dev-backend",
-          "awslogs-create-group": "true",
           "awslogs-region": "us-east-1",
-          "awslogs-stream-prefix": "ecs"
-        },
-        "secretOptions": []
+          "awslogs-stream-prefix": "backend"
+        }
       },
       "systemControls": []
     }
   ],
-  "family": "employee-mgm-${ENV}-backend",
-  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-dev-ecs-execution-role",
+  "family": "employee-mgm-dev-backend",
   "taskRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-dev-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-dev-ecs-execution-role",
   "networkMode": "awsvpc",
   "requiresCompatibilities": [
     "FARGATE"
