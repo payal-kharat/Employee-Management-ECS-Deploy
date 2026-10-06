@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -8,7 +7,6 @@ pipeline {
             choices: ['dev', 'qa', 'uat', 'prod'],
             description: 'Select the deployment environment'
         )
-
         string(
             name: 'IMAGE_TAG',
             defaultValue: '',
@@ -53,10 +51,8 @@ pipeline {
                 script {
                     def commitId = getCommitId()
                     env.DEV_IMAGE_TAG = "DEV-${commitId}-${env.BUILD_NUMBER}"
-
                     buildAndPush(
                         env.DEV_REPO,
-                        env.DEV_IMAGE_TAG,
                         env.BUILD_CONTEXT
                     )
                 }
@@ -72,14 +68,12 @@ pipeline {
             steps {
                 script {
                     env.DEV_IMAGE_TAG = params.IMAGE_TAG
-
                     promoteImage(
                         env.DEV_REPO,
                         env.QA_REPO,
                         env.DEV_IMAGE_TAG,
                         'QA'
                     )
-
                     env.QA_IMAGE_TAG = "QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
                 }
             }
@@ -99,7 +93,6 @@ pipeline {
                         env.QA_IMAGE_TAG,
                         'UAT'
                     )
-
                     env.UAT_IMAGE_TAG = "UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
                 }
             }
@@ -133,7 +126,6 @@ pipeline {
                         env.UAT_IMAGE_TAG,
                         'PROD'
                     )
-
                     env.PROD_IMAGE_TAG = "PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
                 }
             }
@@ -151,7 +143,6 @@ pipeline {
                     def imageTag = getImageTag(params.Environment)
                     def taskFamily = getTaskFamily(params.Environment)
                     def ecsService = getECSService(params.Environment)
-
                     deployToECS(
                         params.Environment,
                         repository,
@@ -179,21 +170,21 @@ def getCommitId() {
 }
 
 def buildAndPush(
-    String repository,
-    String imageTag,
-    String buildContext
+    String DB_IMAGE,
+    String BUILD_CONTEXT
 ) {
-    def imageUri = "${env.ECR_REGISTRY}/${repository}:${imageTag}"
+    def IMAGE_URI = "${env.ECR_REGISTRY}/${DB_IMAGE}:${env.DEV_IMAGE_TAG}"
 
-    echo "Building image: ${imageUri}"
+    echo "Building image:"
+    echo "${IMAGE_URI}"
 
     def image = docker.build(
-        imageUri,
-        "-f ${env.DB_DOCKERFILE} ${buildContext}"
+        IMAGE_URI,
+        "-f ${env.DB_DOCKERFILE} ${BUILD_CONTEXT}"
     )
 
     docker.withRegistry(
-        env.ECR_REGISTRY_URL,
+        "${env.ECR_REGISTRY_URL}",
         "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
     ) {
         image.push()
@@ -212,8 +203,11 @@ def promoteImage(
     def targetTag = "${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
     def targetImage = "${env.ECR_REGISTRY}/${targetRepository}:${targetTag}"
 
-    echo "Source image: ${sourceImage}"
-    echo "Target image: ${targetImage}"
+    echo "Source image:"
+    echo "${sourceImage}"
+
+    echo "Target image:"
+    echo "${targetImage}"
 
     withCredentials([
         [
@@ -223,25 +217,22 @@ def promoteImage(
     ]) {
         sh """
             set -e
-
             aws ecr get-login-password \
                 --region ${env.AWS_REGION} \
                 | docker login \
                     --username AWS \
                     --password-stdin ${env.ECR_REGISTRY}
-
             docker pull ${sourceImage}
-
             docker tag \
                 ${sourceImage} \
                 ${targetImage}
-
             docker push ${targetImage}
         """
     }
 
     echo "DB image promoted successfully."
 }
+
 def deployToECS(
     String environment,
     String repository,
@@ -260,11 +251,9 @@ def deployToECS(
     ]) {
         sh """
             set -e
-
             aws sts get-caller-identity
-
-            sed -i 's|\\\${ENV}|${environment}|g' ${env.TASK_DEFINITION_FILE}
-            sed -i 's|\\\${IMAGE_URI}|${imageUri}|g' ${env.TASK_DEFINITION_FILE}
+            sed -i 's|\\\\\\${ENV}|${environment}|g' ${env.TASK_DEFINITION_FILE}
+            sed -i 's|\\\\\\${IMAGE_URI}|${imageUri}|g' ${env.TASK_DEFINITION_FILE}
         """
 
         echo "Task definition after image replacement:"
@@ -310,6 +299,7 @@ def deployToECS(
         echo "ECS deployment completed successfully."
     }
 }
+
 def getECSCluster(String environment) {
     def clusters = [
         dev: 'employee-mgm-dev-cluster',
@@ -364,4 +354,3 @@ def getImageTag(String environment) {
 
     return imageTags[environment]
 }
-
