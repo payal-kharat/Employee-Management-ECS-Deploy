@@ -242,7 +242,6 @@ def promoteImage(
 
     echo "DB image promoted successfully."
 }
-
 def deployToECS(
     String environment,
     String repository,
@@ -253,53 +252,64 @@ def deployToECS(
     def imageUri = "${env.ECR_REGISTRY}/${repository}:${imageTag}"
     def cluster = getECSCluster(environment)
 
-    sh """
-        sed -i 's|\\\${ENV}|${environment}|g' ${env.TASK_DEFINITION_FILE}
-        sed -i 's|\\\${IMAGE_URI}|${imageUri}|g' ${env.TASK_DEFINITION_FILE}
-    """
+    withCredentials([
+        [
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: env.AWS_CRED
+        ]
+    ]) {
+        sh """
+            set -e
 
-    echo "Task definition after image replacement:"
+            aws sts get-caller-identity
 
-    sh """
-        grep '"image"' ${env.TASK_DEFINITION_FILE}
-    """
+            sed -i 's|\\\${ENV}|${environment}|g' ${env.TASK_DEFINITION_FILE}
+            sed -i 's|\\\${IMAGE_URI}|${imageUri}|g' ${env.TASK_DEFINITION_FILE}
+        """
 
-    echo "Registering ECS task definition..."
+        echo "Task definition after image replacement:"
 
-    def taskRevision = sh(
-        script: """
-            aws ecs register-task-definition \
-                --cli-input-json file://${env.TASK_DEFINITION_FILE} \
-                --region ${env.AWS_REGION} \
-                --query 'taskDefinition.revision' \
-                --output text
-        """,
-        returnStdout: true
-    ).trim()
+        sh """
+            grep '"family"' ${env.TASK_DEFINITION_FILE}
+            grep '"image"' ${env.TASK_DEFINITION_FILE}
+        """
 
-    echo "Task definition revision: ${taskRevision}"
+        echo "Registering ECS task definition..."
 
-    sh """
-        aws ecs update-service \
-            --cluster ${cluster} \
-            --service ${ecsService} \
-            --task-definition ${taskFamily}:${taskRevision} \
-            --force-new-deployment \
-            --region ${env.AWS_REGION}
-    """
+        def taskRevision = sh(
+            script: """
+                aws ecs register-task-definition \
+                    --cli-input-json file://${env.TASK_DEFINITION_FILE} \
+                    --region ${env.AWS_REGION} \
+                    --query 'taskDefinition.revision' \
+                    --output text
+            """,
+            returnStdout: true
+        ).trim()
 
-    echo "Waiting for ECS service to become stable..."
+        echo "Task definition revision: ${taskRevision}"
 
-    sh """
-        aws ecs wait services-stable \
-            --cluster ${cluster} \
-            --services ${ecsService} \
-            --region ${env.AWS_REGION}
-    """
+        sh """
+            aws ecs update-service \
+                --cluster ${cluster} \
+                --service ${ecsService} \
+                --task-definition ${taskFamily}:${taskRevision} \
+                --force-new-deployment \
+                --region ${env.AWS_REGION}
+        """
 
-    echo "ECS deployment completed successfully."
+        echo "Waiting for ECS service to become stable..."
+
+        sh """
+            aws ecs wait services-stable \
+                --cluster ${cluster} \
+                --services ${ecsService} \
+                --region ${env.AWS_REGION}
+        """
+
+        echo "ECS deployment completed successfully."
+    }
 }
-
 def getECSCluster(String environment) {
     def clusters = [
         dev: 'employee-mgm-dev-cluster',
