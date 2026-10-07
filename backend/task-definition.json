@@ -28,11 +28,11 @@
         },
         {
           "name": "DB_USER",
-          "value": "employee_user"
+          "value": "**********"
         },
         {
           "name": "DB_PASSWORD",
-          "value": "employee123"
+          "value": "*************"
         }
       ],
       "logConfiguration": {
