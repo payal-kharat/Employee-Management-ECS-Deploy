@@ -24,11 +24,11 @@
         },
         {
           "name": "MYSQL_PASSWORD",
-          "value": "employee123"
+          "value": "***********"
         },
         {
           "name": "MYSQL_ROOT_PASSWORD",
-          "value": "rootpassword"
+          "value": "*************"
         }
       ],
       "mountPoints": [],
