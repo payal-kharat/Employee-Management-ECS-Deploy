@@ -25,14 +25,16 @@
         {
           "name": "DB_PORT",
           "value": "3306"
-        },
+        }
+      ],
+      "secrets": [
         {
           "name": "DB_USER",
-          "value": "**********"
+          "valueFrom": "${SECRET_ARN}:DB_USER::"
         },
         {
           "name": "DB_PASSWORD",
-          "value": "*************"
+          "valueFrom": "${SECRET_ARN}:DB_PASSWORD::"
         }
       ],
       "logConfiguration": {
