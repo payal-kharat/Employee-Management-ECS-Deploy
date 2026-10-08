@@ -22,15 +22,15 @@
       "secrets": [
         {
           "name": "MYSQL_USER",
-          "valueFrom": "${SECRET_ARN}:MYSQL_USER::"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:552940445807:secret:employee-mgm-dev-secrets-biFozp:MYSQL_USER::"
         },
         {
           "name": "MYSQL_PASSWORD",
-          "valueFrom": "${SECRET_ARN}:MYSQL_PASSWORD::"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:552940445807:secret:employee-mgm-dev-secrets-biFozp:MYSQL_PASSWORD::"
         },
         {
           "name": "MYSQL_ROOT_PASSWORD",
-          "valueFrom": "${SECRET_ARN}:MYSQL_ROOT_PASSWORD::"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:552940445807:secret:employee-mgm-dev-secrets-biFozp:MYSQL_ROOT_PASSWORD::"
         }
       ],
       "mountPoints": [],
