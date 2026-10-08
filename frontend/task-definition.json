@@ -1,0 +1,49 @@
+{
+  "containerDefinitions": [
+    {
+      "name": "frontend",
+      "image": "552940445807.dkr.ecr.us-east-1.amazonaws.com/employee-mgm-${ENV}-frontend:${COMMIT_ID}",
+      "cpu": 0,
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "hostPort": 80,
+          "protocol": "tcp",
+          "name": "frontend",
+          "appProtocol": "http"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {
+          "name": "BACKEND_HOST",
+          "value": "emp-backend.emp-${ENV}.local"
+        }
+      ],
+      "environmentFiles": [],
+      "mountPoints": [],
+      "volumesFrom": [],
+      "ulimits": [],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/employee-mgm-${ENV}-frontend",
+          "awslogs-create-group": "true",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        },
+        "secretOptions": []
+      },
+      "systemControls": []
+    }
+  ],
+  "family": "employee-mgm-${ENV}-frontend",
+  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-${ENV}-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-${ENV}-ecs-task-role",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512"
+}

@@ -1,0 +1,58 @@
+{
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "552940445807.dkr.ecr.us-east-1.amazonaws.com/employee-mgm-${ENV}-backend:${COMMIT_ID}",
+      "cpu": 0,
+      "portMappings": [
+        {
+          "containerPort": 5000,
+          "hostPort": 5000,
+          "protocol": "tcp",
+          "name": "backend"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {
+          "name": "DB_NAME",
+          "value": "employee_db"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "emp-db.emp-${ENV}.local"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "3306"
+        },
+        {
+          "name": "DB_USER",
+          "value": "**********"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "value": "*************"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/employee-mgm-${ENV}-backend",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "backend"
+        }
+      },
+      "systemControls": []
+    }
+  ],
+  "family": "employee-mgm-${ENV}-backend",
+  "taskRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-${ENV}-ecs-task-role",
+  "executionRoleArn": "arn:aws:iam::552940445807:role/employee-mgm-${ENV}-ecs-execution-role",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512"
+}

@@ -1,0 +1,365 @@
+
+pipeline {
+    agent any
+
+    parameters {
+        choice(
+            name: 'Environment',
+            choices: ['dev', 'qa', 'uat', 'prod'],
+            description: 'Select the deployment environment'
+        )
+
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: '',
+            description: 'Existing DEV image tag to promote. Required for QA/UAT/PROD.'
+        )
+    }
+
+    environment {
+        AWS_REGION = 'us-east-1'
+        AWS_ACCOUNT_ID = '552940445807'
+        AWS_CRED = 'AWS'
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        ECR_REGISTRY_URL = "https://${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+        DEV_REPO = 'employee-mgm-dev-backend'
+        QA_REPO = 'employee-mgm-qa-backend'
+        UAT_REPO = 'employee-mgm-uat-backend'
+        PROD_REPO = 'employee-mgm-prod-backend'
+
+        BUILD_CONTEXT = './backend'
+        BACKEND_DOCKERFILE = './backend/Dockerfile'
+        TASK_DEFINITION_FILE = './backend/task-definition.json'
+    }
+
+    stages {
+        stage('Get ECS Cluster') {
+            steps {
+                script {
+                    env.ECS_CLUSTER = getECSCluster(params.Environment)
+                    echo "ECS_CLUSTER = ${env.ECS_CLUSTER}"
+                }
+            }
+        }
+
+        stage('Dev - Build & Push Backend') {
+            when {
+                expression {
+                    params.Environment == 'dev'
+                }
+            }
+            steps {
+                script {
+                    def commitId = getCommitId()
+                    env.DEV_IMAGE_TAG = "DEV-${commitId}-${env.BUILD_NUMBER}"
+
+                    buildAndPush(
+                        env.DEV_REPO,
+                        env.DEV_IMAGE_TAG,
+                        env.BUILD_CONTEXT
+                    )
+                }
+            }
+        }
+
+        stage('Promote Backend Dev to QA') {
+            when {
+                expression {
+                    params.Environment in ['qa', 'uat', 'prod']
+                }
+            }
+            steps {
+                script {
+                    env.DEV_IMAGE_TAG = params.IMAGE_TAG
+
+                    if (!env.DEV_IMAGE_TAG?.trim()) {
+                        error("IMAGE_TAG is required for ${params.Environment}.")
+                    }
+
+                    if (!env.DEV_IMAGE_TAG.startsWith('DEV-')) {
+                        error("IMAGE_TAG must be an existing DEV image tag. Example: DEV-cff5bc9-14")
+                    }
+
+                    promoteImage(
+                        env.DEV_REPO,
+                        env.QA_REPO,
+                        env.DEV_IMAGE_TAG,
+                        'QA'
+                    )
+
+                    env.QA_IMAGE_TAG = "QA-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                }
+            }
+        }
+
+        stage('Promote Backend QA to UAT') {
+            when {
+                expression {
+                    params.Environment in ['uat', 'prod']
+                }
+            }
+            steps {
+                script {
+                    promoteImage(
+                        env.QA_REPO,
+                        env.UAT_REPO,
+                        env.QA_IMAGE_TAG,
+                        'UAT'
+                    )
+
+                    env.UAT_IMAGE_TAG = "UAT-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                }
+            }
+        }
+
+        stage('Production Approval') {
+            when {
+                expression {
+                    params.Environment == 'prod'
+                }
+            }
+            steps {
+                input(
+                    message: 'DEV → QA → UAT Backend promotion completed. Deploy Employee Management Backend to PROD?',
+                    ok: 'Deploy to PROD'
+                )
+            }
+        }
+
+        stage('Promote Backend UAT to PROD') {
+            when {
+                expression {
+                    params.Environment == 'prod'
+                }
+            }
+            steps {
+                script {
+                    promoteImage(
+                        env.UAT_REPO,
+                        env.PROD_REPO,
+                        env.UAT_IMAGE_TAG,
+                        'PROD'
+                    )
+
+                    env.PROD_IMAGE_TAG = "PROD-${env.DEV_IMAGE_TAG.replaceFirst('^DEV-', '')}"
+                }
+            }
+        }
+
+        stage('Deploy Backend') {
+            when {
+                expression {
+                    params.Environment in ['dev', 'qa', 'uat', 'prod']
+                }
+            }
+            steps {
+                script {
+                    def taskFamily = getTaskFamily(params.Environment)
+                    def ecsService = getECSService(params.Environment)
+
+                    deployToECS(
+                        env.TASK_DEFINITION_FILE,
+                        taskFamily,
+                        ecsService
+                    )
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            deleteDir()
+        }
+    }
+}
+
+def getCommitId() {
+    return sh(
+        script: 'git rev-parse --short=7 HEAD',
+        returnStdout: true
+    ).trim()
+}
+
+def buildAndPush(
+    String repository,
+    String imageTag,
+    String buildContext
+) {
+    def imageUri = "${env.ECR_REGISTRY}/${repository}:${imageTag}"
+
+    echo "Building image: ${imageUri}"
+
+    def image = docker.build(
+        imageUri,
+        "-f ${env.BACKEND_DOCKERFILE} ${buildContext}"
+    )
+
+    docker.withRegistry(
+        env.ECR_REGISTRY_URL,
+        "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
+    ) {
+        image.push()
+    }
+
+    echo "Backend image pushed successfully."
+}
+
+def promoteImage(
+    String sourceRepository,
+    String targetRepository,
+    String sourceTag,
+    String targetEnvironment
+) {
+    def sourceImage = "${env.ECR_REGISTRY}/${sourceRepository}:${sourceTag}"
+    def targetTag = "${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
+    def targetImage = "${env.ECR_REGISTRY}/${targetRepository}:${targetTag}"
+
+    echo "Source image: ${sourceImage}"
+    echo "Target image: ${targetImage}"
+
+    withCredentials([
+        [
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: env.AWS_CRED
+        ]
+    ]) {
+        docker.withRegistry(
+            env.ECR_REGISTRY_URL,
+            "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
+        ) {
+            docker.image(sourceImage).pull()
+        }
+
+        sh """
+            docker tag \
+                ${sourceImage} \
+                ${targetImage}
+        """
+
+        docker.withRegistry(
+            env.ECR_REGISTRY_URL,
+            "ecr:${env.AWS_REGION}:${env.AWS_CRED}"
+        ) {
+            docker.image(targetImage).push()
+        }
+    }
+
+    echo "Backend image promoted successfully."
+}
+
+def deployToECS(
+    String taskDefinitionFile,
+    String taskFamily,
+    String ecsService
+) {
+    def environment = params.Environment
+    def imageTag = getImageTag(environment)
+    def region = env.AWS_REGION
+    def cluster = getECSCluster(environment)
+
+    withCredentials([
+        [
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: env.AWS_CRED
+        ]
+    ]) {
+        sh(
+            script: '''set -e
+aws sts get-caller-identity
+sed -i 's|\\${ENV}|''' + environment + '''|g' ''' + taskDefinitionFile + '''
+sed -i 's|\\${COMMIT_ID}|''' + imageTag + '''|g' ''' + taskDefinitionFile
+        )
+
+        echo "Task definition after image replacement:"
+
+        sh """
+            grep '"family"' ${taskDefinitionFile}
+            grep '"image"' ${taskDefinitionFile}
+        """
+
+        echo "Registering ECS task definition..."
+
+        def taskRevision = sh(
+            script: """
+                aws ecs register-task-definition \
+                    --cli-input-json file://${taskDefinitionFile} \
+                    --region ${region} \
+                    --query 'taskDefinition.revision' \
+                    --output text
+            """,
+            returnStdout: true
+        ).trim()
+
+        echo "Task definition revision: ${taskRevision}"
+
+        echo "Updating ECS service..."
+
+        sh """
+            aws ecs update-service \
+                --cluster ${cluster} \
+                --service ${ecsService} \
+                --task-definition ${taskFamily}:${taskRevision} \
+                --region ${region}
+        """
+
+        echo "Backend ECS deployment completed successfully."
+    }
+}
+
+def getECSCluster(String environment) {
+    def clusters = [
+        dev: 'employee-mgm-dev-cluster',
+        qa: 'employee-mgm-qa-cluster',
+        uat: 'employee-mgm-uat-cluster',
+        prod: 'employee-mgm-prod-cluster'
+    ]
+
+    return clusters[environment]
+}
+
+def getTaskFamily(String environment) {
+    def taskFamilies = [
+        dev: 'employee-mgm-dev-backend',
+        qa: 'employee-mgm-qa-backend',
+        uat: 'employee-mgm-uat-backend',
+        prod: 'employee-mgm-prod-backend'
+    ]
+
+    return taskFamilies[environment]
+}
+
+def getECSService(String environment) {
+    def services = [
+        dev: 'employee-mgm-dev-backend-service',
+        qa: 'employee-mgm-qa-backend-service',
+        uat: 'employee-mgm-uat-backend-service',
+        prod: 'employee-mgm-prod-backend-service'
+    ]
+
+    return services[environment]
+}
+
+def getRepository(String environment) {
+    def repositories = [
+        dev: env.DEV_REPO,
+        qa: env.QA_REPO,
+        uat: env.UAT_REPO,
+        prod: env.PROD_REPO
+    ]
+
+    return repositories[environment]
+}
+
+def getImageTag(String environment) {
+    def imageTags = [
+        dev: env.DEV_IMAGE_TAG,
+        qa: env.QA_IMAGE_TAG,
+        uat: env.UAT_IMAGE_TAG,
+        prod: env.PROD_IMAGE_TAG
+    ]
+
+    return imageTags[environment]
+}
+
