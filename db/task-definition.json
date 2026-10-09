@@ -17,18 +17,20 @@
         {
           "name": "MYSQL_DATABASE",
           "value": "employee_db"
-        },
+        }
+      ],
+      "secrets": [
         {
           "name": "MYSQL_USER",
-          "value": "employee_user"
+          "valueFrom": "${SECRET_ARN}:MYSQL_USER::"
         },
         {
           "name": "MYSQL_PASSWORD",
-          "value": "***********"
+          "valueFrom": "${SECRET_ARN}:MYSQL_PASSWORD::"
         },
         {
           "name": "MYSQL_ROOT_PASSWORD",
-          "value": "*************"
+          "valueFrom": "${SECRET_ARN}:MYSQL_ROOT_PASSWORD::"
         }
       ],
       "mountPoints": [],
