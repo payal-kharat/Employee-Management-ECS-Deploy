@@ -152,14 +152,16 @@ def buildAndPush(String repository, String imageTag, String buildContext) {
     echo 'Backend image pushed successfully.'
 }
 
+
 def promoteImage(
     String sourceRepository,
     String targetRepository,
     String sourceTag,
     String targetEnvironment
 ) {
+    def baseTag = sourceTag.replaceFirst(/^(DEV|QA|UAT|PROD)-/, '')
+    def targetTag = "${targetEnvironment}-${baseTag}"
     def sourceImage = "${env.ECR_REGISTRY}/${sourceRepository}:${sourceTag}"
-    def targetTag = "${targetEnvironment}-${sourceTag.replaceFirst('^DEV-', '')}"
     def targetImage = "${env.ECR_REGISTRY}/${targetRepository}:${targetTag}"
 
     echo "Source image: ${sourceImage}"
@@ -178,7 +180,9 @@ def promoteImage(
             docker.image(sourceImage).pull()
         }
 
-        sh "docker tag '${sourceImage}' '${targetImage}'"
+        sh """
+            docker tag '${sourceImage}' '${targetImage}'
+        """
 
         docker.withRegistry(
             env.ECR_REGISTRY_URL,
@@ -188,7 +192,7 @@ def promoteImage(
         }
     }
 
-    echo 'Backend image promoted successfully.'
+    echo "DB image promoted successfully: ${targetImage}"
 }
 
 def deployToECS(
