@@ -30,11 +30,11 @@
       "secrets": [
         {
           "name": "DB_USER",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:552940445807:secret:employee-mgm-dev-secrets-biFozp:DB_USER::"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:552940445807:secret:employee-mgm-dev-secrets-A60NpT:DB_USER::"
         },
         {
           "name": "DB_PASSWORD",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:552940445807:secret:employee-mgm-dev-secrets-biFozp:DB_PASSWORD::"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:552940445807:secret:employee-mgm-dev-secrets-A60NpT:DB_PASSWORD::"
         }
       ],
       "logConfiguration": {
