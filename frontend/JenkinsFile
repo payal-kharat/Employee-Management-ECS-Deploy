@@ -4,13 +4,13 @@ pipeline {
 
     parameters {
         choice(
-            name: 'ENVIRONMENT',
+            name: 'Environment',
             choices: ['dev', 'qa', 'uat', 'prod'],
             description: 'Select the environment to deploy'
         )
 
         string(
-            name: 'DEV_IMAGE_TAG',
+            name: 'IMAGE_TAG',
             defaultValue: '',
             description: 'For QA/UAT/PROD enter the existing DEV image tag, e.g. DEV-a1b2c3d-25'
         )
@@ -34,48 +34,11 @@ pipeline {
     }
 
     stages {
-        stage('Validate Parameters') {
+        stage('Get ECS Cluster') {
             steps {
                 script {
-                    echo "ENVIRONMENT = ${params.ENVIRONMENT}"
-                    echo "DEV_IMAGE_TAG = ${params.DEV_IMAGE_TAG}"
-
-                    if (
-                        params.ENVIRONMENT in ['qa', 'uat', 'prod'] &&
-                        !params.DEV_IMAGE_TAG?.trim()
-                    ) {
-                        error(
-                            "DEV_IMAGE_TAG is required for ${params.ENVIRONMENT}. " +
-                            "Example: DEV-a1b2c3d-25"
-                        )
-                    }
-
-                    if (
-                        params.ENVIRONMENT in ['qa', 'uat', 'prod'] &&
-                        !params.DEV_IMAGE_TAG.startsWith('DEV-')
-                    ) {
-                        error(
-                            "DEV_IMAGE_TAG must be an existing DEV image tag. " +
-                            "Example: DEV-a1b2c3d-25"
-                        )
-                    }
-                }
-            }
-        }
-
-        stage('Checkout') {
-            steps {
-                checkout scm
-
-                script {
-                    env.COMMIT_ID = sh(
-                        script: 'git rev-parse --short=7 HEAD',
-                        returnStdout: true
-                    ).trim()
-
-                    echo "COMMIT_ID = ${env.COMMIT_ID}"
-                    echo "ENVIRONMENT = ${params.ENVIRONMENT}"
-                    echo "DEV_IMAGE_TAG = ${params.DEV_IMAGE_TAG}"
+                    env.ECS_CLUSTER = getECSCluster(params.Environment)
+                    echo "ECS_CLUSTER = ${env.ECS_CLUSTER}"
                 }
             }
         }
@@ -83,20 +46,15 @@ pipeline {
         stage('Dev - Build & Push Frontend') {
             when {
                 expression {
-                    params.ENVIRONMENT == 'dev'
+                    params.Environment == 'dev'
                 }
             }
             steps {
                 script {
-                    def imageTag = "DEV-${env.COMMIT_ID}-${env.BUILD_NUMBER}"
+                    def commitId = getCommitId()
+                    env.DEV_IMAGE_TAG = "DEV-${commitId}-${env.BUILD_NUMBER}"
 
-                    env.DEV_IMAGE_TAG = imageTag
-
-                    buildAndPush(
-                        env.DEV_REPO,
-                        imageTag,
-                        env.BUILD_CONTEXT
-                    )
+                    buildAndPush(env.DEV_REPO, env.DEV_IMAGE_TAG, env.BUILD_CONTEXT)
                 }
             }
         }
@@ -104,12 +62,20 @@ pipeline {
         stage('Promote Frontend Dev to QA') {
             when {
                 expression {
-                    params.ENVIRONMENT in ['qa', 'uat', 'prod']
+                    params.Environment in ['qa', 'uat', 'prod']
                 }
             }
             steps {
                 script {
-                    env.DEV_IMAGE_TAG = params.DEV_IMAGE_TAG
+                    env.DEV_IMAGE_TAG = params.IMAGE_TAG?.trim()
+
+                    if (!env.DEV_IMAGE_TAG) {
+                        error("IMAGE_TAG is required for ${params.Environment}.")
+                    }
+
+                    if (!env.DEV_IMAGE_TAG.startsWith('DEV-')) {
+                        error('IMAGE_TAG must be an existing DEV image tag, for example DEV-a1b2c3d-25.')
+                    }
 
                     promoteImage(
                         env.DEV_REPO,
@@ -127,7 +93,7 @@ pipeline {
         stage('Promote Frontend QA to UAT') {
             when {
                 expression {
-                    params.ENVIRONMENT in ['uat', 'prod']
+                    params.Environment in ['uat', 'prod']
                 }
             }
             steps {
@@ -148,7 +114,7 @@ pipeline {
         stage('Production Approval') {
             when {
                 expression {
-                    params.ENVIRONMENT == 'prod'
+                    params.Environment == 'prod'
                 }
             }
             steps {
@@ -162,7 +128,7 @@ pipeline {
         stage('Promote Frontend UAT to PROD') {
             when {
                 expression {
-                    params.ENVIRONMENT == 'prod'
+                    params.Environment == 'prod'
                 }
             }
             steps {
@@ -183,13 +149,13 @@ pipeline {
         stage('Deploy Frontend') {
             when {
                 expression {
-                    params.ENVIRONMENT in ['dev', 'qa', 'uat', 'prod']
+                    params.Environment in ['dev', 'qa', 'uat', 'prod']
                 }
             }
             steps {
                 script {
-                    def taskFamily = getTaskFamily(params.ENVIRONMENT)
-                    def ecsService = getECSService(params.ENVIRONMENT)
+                    def taskFamily = getTaskFamily(params.Environment)
+                    def ecsService = getECSService(params.Environment)
 
                     deployToECS(
                         env.TASK_DEFINITION_FILE,
@@ -287,7 +253,7 @@ def deployToECS(
     String taskFamily,
     String ecsService
 ) {
-    def environment = params.ENVIRONMENT
+    def environment = params.Environment
     def imageTag = getImageTag(environment)
     def region = env.AWS_REGION
     def cluster = getECSCluster(environment)
