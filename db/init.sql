@@ -1,7 +1,7 @@
-CREATE TABLE employees (
+CREATE TABLE IF NOT EXISTS employees (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
+    name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
-    department VARCHAR(100),
-    salary DECIMAL(12,2)
+    department VARCHAR(255) NOT NULL,
+    salary DECIMAL(10,2) NOT NULL
 );
